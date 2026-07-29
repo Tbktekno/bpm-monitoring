@@ -1,0 +1,63 @@
+// =============================================================================
+// BPM & SpO₂ Monitoring — gRPC Service Definition
+// =============================================================================
+
+syntax = "proto3";
+
+package health;
+
+service HealthService {
+  // Process a new vital-signs reading from ESP32
+  rpc ProcessReading (ReadingRequest) returns (ReadingResponse);
+
+  // Get aggregated summary for a patient
+  rpc GetPatientSummary (PatientRequest) returns (PatientSummaryResponse);
+
+  // Get dashboard statistics
+  rpc GetDashboardStats (Empty) returns (DashboardStatsResponse);
+}
+
+message Empty {}
+
+message ReadingRequest {
+  int32 patient_id = 1;
+  int32 bpm = 2;
+  int32 spo2 = 3;
+  int32 session_id = 4;
+}
+
+message ReadingResponse {
+  int32 id = 1;
+  int32 patient_id = 2;
+  int32 bpm = 3;
+  int32 spo2 = 4;
+  string bpm_status = 5;
+  string spo2_status = 6;
+  string status = 7;
+  string created_at = 8;
+}
+
+message PatientRequest {
+  int32 patient_id = 1;
+}
+
+message PatientSummaryResponse {
+  int32 patient_id = 1;
+  string patient_name = 2;
+  int32 total_readings = 3;
+  double avg_bpm = 4;
+  double avg_spo2 = 5;
+  int32 normal_count = 6;
+  int32 waspada_count = 7;
+  int32 darurat_count = 8;
+  string latest_status = 9;
+}
+
+message DashboardStatsResponse {
+  int32 total_patients = 1;
+  int32 normal_count = 2;
+  int32 waspada_count = 3;
+  int32 darurat_count = 4;
+  double avg_bpm = 5;
+  double avg_spo2 = 6;
+}

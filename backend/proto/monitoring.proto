@@ -1,0 +1,312 @@
+// =============================================================================
+// BPM & SpO₂ Monitoring Dashboard — gRPC Service Definitions
+// =============================================================================
+// This file is the SINGLE SOURCE OF TRUTH for all service contracts.
+// All services (Express REST → gRPC → Database) are defined herein.
+// =============================================================================
+
+syntax = "proto3";
+
+package monitoring;
+
+// =============================================================================
+// Common Messages
+// =============================================================================
+
+message Empty {}
+
+message Pagination {
+  int32 page = 1;
+  int32 limit = 2;
+  int32 total = 3;
+  int32 total_pages = 4;
+}
+
+message StatusDistribution {
+  string status = 1;
+  int32 count = 2;
+}
+
+// =============================================================================
+// Service 1: AuthService
+// =============================================================================
+
+service AuthService {
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Logout(LogoutRequest) returns (Empty);
+  rpc GetCurrentAdmin(GetCurrentAdminRequest) returns (AdminResponse);
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  int32 admin_id = 1;
+  string name = 2;
+  string email = 3;
+  string token = 4;
+}
+
+message LogoutRequest {
+  int32 admin_id = 1;
+  string token = 2;
+}
+
+message GetCurrentAdminRequest {
+  int32 admin_id = 1;
+}
+
+message AdminResponse {
+  int32 admin_id = 1;
+  string name = 2;
+  string email = 3;
+  string created_at = 4;
+}
+
+// =============================================================================
+// Service 2: DashboardService
+// =============================================================================
+
+service DashboardService {
+  rpc GetDashboardStats(Empty) returns (DashboardStatsResponse);
+}
+
+message DashboardStatsResponse {
+  int32 total_patients = 1;
+  int32 active_sessions = 2;
+  int32 readings_today = 3;
+  int32 normal_readings = 4;
+  int32 waspada_readings = 5;
+  int32 darurat_readings = 6;
+  double avg_bpm = 7;
+  double avg_spo2 = 8;
+  repeated RecentReading recent_readings = 9;
+  repeated StatusDistribution bpm_distribution = 10;
+  repeated StatusDistribution spo2_distribution = 11;
+}
+
+message RecentReading {
+  int32 id = 1;
+  int32 patient_id = 2;
+  string patient_name = 3;
+  string patient_id_display = 4;
+  int32 bpm = 5;
+  int32 spo2 = 6;
+  string bpm_status = 7;
+  string spo2_status = 8;
+  string status = 9;
+  string created_at = 10;
+}
+
+// =============================================================================
+// Service 3: PatientService
+// =============================================================================
+
+service PatientService {
+  rpc ListPatients(ListPatientsRequest) returns (ListPatientsResponse);
+  rpc GetPatient(GetPatientRequest) returns (PatientResponse);
+  rpc CreatePatient(CreatePatientRequest) returns (PatientResponse);
+  rpc UpdatePatient(UpdatePatientRequest) returns (PatientResponse);
+  rpc DeletePatient(DeletePatientRequest) returns (DeletePatientResponse);
+}
+
+message ListPatientsRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  string search = 3;
+  string sort_by = 4;
+  string sort_order = 5;
+}
+
+message ListPatientsResponse {
+  repeated PatientResponse patients = 1;
+  Pagination pagination = 2;
+}
+
+message GetPatientRequest {
+  int32 id = 1;
+}
+
+message PatientResponse {
+  int32 id = 1;
+  string patient_id = 2;
+  string name = 3;
+  string nik = 4;
+  string gender = 5;
+  string birth_date = 6;
+  int32 age = 7;
+  string address = 8;
+  string phone = 9;
+  string blood_type = 10;
+  double height = 11;
+  double weight = 12;
+  string medical_history = 13;
+  string doctor_note = 14;
+  string created_at = 15;
+  string updated_at = 16;
+}
+
+message CreatePatientRequest {
+  string patient_id = 1;
+  string name = 2;
+  string nik = 3;
+  string gender = 4;
+  string birth_date = 5;
+  int32 age = 6;
+  string address = 7;
+  string phone = 8;
+  string blood_type = 9;
+  double height = 10;
+  double weight = 11;
+  string medical_history = 12;
+  string doctor_note = 13;
+}
+
+message UpdatePatientRequest {
+  int32 id = 1;
+  string patient_id = 2;
+  string name = 3;
+  string nik = 4;
+  string gender = 5;
+  string birth_date = 6;
+  int32 age = 7;
+  string address = 8;
+  string phone = 9;
+  string blood_type = 10;
+  double height = 11;
+  double weight = 12;
+  string medical_history = 13;
+  string doctor_note = 14;
+}
+
+message DeletePatientRequest {
+  int32 id = 1;
+}
+
+message DeletePatientResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// =============================================================================
+// Service 4: MonitoringService
+// =============================================================================
+
+service MonitoringService {
+  rpc GetRealtimeMonitoring(Empty) returns (RealtimeMonitoringResponse);
+  rpc GetMonitoringHistory(GetMonitoringHistoryRequest) returns (MonitoringHistoryResponse);
+  rpc SaveReading(SaveReadingRequest) returns (ReadingResponse);
+}
+
+message RealtimeMonitoringResponse {
+  repeated ReadingResponse readings = 1;
+  int32 total_active_sessions = 2;
+}
+
+message GetMonitoringHistoryRequest {
+  int32 patient_id = 1;
+  int32 page = 2;
+  int32 limit = 3;
+}
+
+message MonitoringHistoryResponse {
+  repeated ReadingResponse readings = 1;
+  Pagination pagination = 2;
+}
+
+message SaveReadingRequest {
+  int32 patient_id = 1;
+  int32 bpm = 2;
+  int32 spo2 = 3;
+  optional int32 session_id = 4;
+}
+
+message ReadingResponse {
+  int32 id = 1;
+  int32 patient_id = 2;
+  string patient_name = 3;
+  string patient_id_display = 4;
+  int32 bpm = 5;
+  int32 spo2 = 6;
+  string bpm_status = 7;
+  string spo2_status = 8;
+  string status = 9;
+  string created_at = 10;
+}
+
+// =============================================================================
+// Service 5: ReportService
+// =============================================================================
+
+service ReportService {
+  rpc GetDailyReport(DailyReportRequest) returns (ReportResponse);
+  rpc GetMonthlyReport(MonthlyReportRequest) returns (ReportResponse);
+  rpc ExportReport(ExportReportRequest) returns (ExportResponse);
+}
+
+message DailyReportRequest {
+  string date = 1;
+}
+
+message MonthlyReportRequest {
+  int32 month = 1;
+  int32 year = 2;
+}
+
+message ReportResponse {
+  string period = 1;
+  int32 total_readings = 2;
+  int32 total_patients = 3;
+  int32 normal_count = 4;
+  int32 waspada_count = 5;
+  int32 darurat_count = 6;
+  double avg_bpm = 7;
+  double avg_spo2 = 8;
+  int32 min_bpm = 9;
+  int32 max_bpm = 10;
+  int32 min_spo2 = 11;
+  int32 max_spo2 = 12;
+  repeated StatusDistribution bpm_distribution = 13;
+  repeated StatusDistribution spo2_distribution = 14;
+}
+
+message ExportReportRequest {
+  string type = 1;       // daily | monthly | custom
+  string date_from = 2;
+  string date_to = 3;
+  string format = 4;     // csv | json | pdf
+}
+
+message ExportResponse {
+  string file_url = 1;
+  string file_data = 2;
+  string file_name = 3;
+  string mime_type = 4;
+}
+
+// =============================================================================
+// Service 6: SettingsService
+// =============================================================================
+
+service SettingsService {
+  rpc GetSettings(Empty) returns (SettingsResponse);
+  rpc UpdateSettings(UpdateSettingsRequest) returns (SettingsResponse);
+}
+
+message Setting {
+  int32 id = 1;
+  string key = 2;
+  string value = 3;
+  string description = 4;
+  string updated_at = 5;
+}
+
+message SettingsResponse {
+  repeated Setting settings = 1;
+}
+
+message UpdateSettingsRequest {
+  repeated Setting settings = 1;
+}

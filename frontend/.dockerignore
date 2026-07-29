@@ -1,0 +1,36 @@
+# =============================================================================
+# Docker Ignore — Frontend
+# =============================================================================
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-ssr/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Source maps (optional — uncomment to exclude in production)
+# *.map

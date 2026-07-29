@@ -1,0 +1,40 @@
+# =============================================================================
+# Docker Ignore — Backend
+# =============================================================================
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Database files (SQLite dev)
+*.db
+*.db-journal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db

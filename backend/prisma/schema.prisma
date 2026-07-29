@@ -1,0 +1,154 @@
+// =============================================================================
+// BPM & SpO₂ Monitoring Dashboard — Database Schema
+// =============================================================================
+// Datasource: SQLite for development
+// For production, switch to PostgreSQL (see commented block below)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─── Development: SQLite ─────────────────────────────────────────────────────
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Production: PostgreSQL ──────────────────────────────────────────────────
+// To switch to PostgreSQL:
+//   1. Uncomment the datasource block below
+//   2. Comment out the SQLite datasource block above
+//   3. Set DATABASE_URL to your PostgreSQL connection string
+//   4. Run: npx prisma db push
+//
+// datasource db {
+//   provider = "postgresql"
+//   url      = env("DATABASE_URL")
+// }
+
+// =============================================================================
+// 1. Admin (User)
+// =============================================================================
+model Admin {
+  id           Int        @id @default(autoincrement())
+  name         String
+  email        String     @unique
+  passwordHash String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  auditLogs    AuditLog[]
+}
+
+// =============================================================================
+// 2. Patient
+// =============================================================================
+model Patient {
+  id             Int                @id @default(autoincrement())
+  patientId      String             @unique                                // Format: P-001, P-002...
+  name           String
+  nik            String?            @unique                                // NIK (encrypted at rest)
+  gender         String                                                      // L / P
+  birthDate      DateTime
+  age            Int                                                        // Computed at insert/update
+  address        String?
+  phone          String?
+  bloodType      String?                                                    // A, B, AB, O
+  height         Float?                                                     // cm
+  weight         Float?                                                     // kg
+  medicalHistory String?                                                    // Encrypted at rest
+  doctorNote     String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  readings       Reading[]
+  sessions       MonitoringSession[]
+  auditLogs      AuditLog[]
+}
+
+// =============================================================================
+// 3. Reading (Vital Signs)
+// =============================================================================
+model Reading {
+  id          Int                @id @default(autoincrement())
+  patientId   Int?               // Opsional — pasien ditentukan di dashboard
+  bpm         Int
+  spo2        Int
+  bpmStatus   String               // BRADICARDIA, NORMAL, TACHY_RINGAN, TACHY_BERAT
+  spo2Status  String               // NORMAL, HIPOKSEMIA_RINGAN, HIPOKSEMIA_SEDANG, HIPOKSEMIA_BERAT
+  status      String               // NORMAL, WASPADA, DARURAT (composite)
+  sessionId   Int?
+  createdAt   DateTime          @default(now())
+
+  patient     Patient?          @relation(fields: [patientId], references: [id])
+  session     MonitoringSession? @relation(fields: [sessionId], references: [id])
+
+  @@index([patientId, createdAt])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// 4. MonitoringSession
+// =============================================================================
+model MonitoringSession {
+  id        Int       @id @default(autoincrement())
+  patientId Int
+  deviceId  String?              // ESP32 device yang dipakai (optional)
+  status    String    @default("ACTIVE")   // ACTIVE, COMPLETED, CANCELLED
+  startTime DateTime  @default(now())
+  endTime   DateTime?
+  notes     String?
+  createdAt DateTime  @default(now())
+
+  patient   Patient   @relation(fields: [patientId], references: [id])
+  readings  Reading[]
+
+  @@index([patientId, startTime])
+  @@index([deviceId])
+}
+
+// =============================================================================
+// 5. Setting
+// =============================================================================
+model Setting {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+// =============================================================================
+// 6. Esp32Device
+// =============================================================================
+model Esp32Device {
+  id        Int      @id @default(autoincrement())
+  deviceId  String   @unique
+  apiKey    String              // SHA-256 hash
+  label     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// =============================================================================
+// 7. AuditLog
+// =============================================================================
+model AuditLog {
+  id        Int       @id @default(autoincrement())
+  adminId   Int
+  patientId Int?
+  action    String                // VIEW, CREATE, UPDATE, DELETE
+  details   String?
+  ipAddress String?
+  createdAt DateTime  @default(now())
+
+  admin     Admin     @relation(fields: [adminId], references: [id])
+  patient   Patient?  @relation(fields: [patientId], references: [id])
+
+  @@index([createdAt])
+  @@index([adminId])
+  @@index([patientId])
+}
