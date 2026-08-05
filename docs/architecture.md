@@ -1,781 +1,519 @@
 # Panduan Arsitektur — BPM & SpO₂ Monitoring Dashboard
 
-Dokumen ini menjelaskan arsitektur sistem secara menyeluruh, termasuk desain modul, alur data, keamanan, dan database.
+Dokumen ini menjelaskan arsitektur sistem secara menyeluruh: desain modul, alur data, keamanan, real-time, gRPC, dan komponen backend.
 
 ---
 
 ## Daftar Isi
 
-- [Gambaran Umum Sistem](#gambaran-umum-sistem)
-- [Diagram C4 — Level 1: Context](#diagram-c4--level-1-context)
-- [Diagram C4 — Level 2: Container](#diagram-c4--level-2-container)
-- [Alur Permintaan HTTP](#alur-permintaan-http)
-- [Alur Data Real-Time](#alur-data-real-time)
-- [Arsitektur Modul (Clean Architecture)](#arsitektur-modul-clean-architecture)
-- [Database Schema](#database-schema)
-- [Arsitektur Keamanan](#arsitektur-keamanan)
+- [Gambaran Umum](#gambaran-umum)
+- [Diagram Konteks (C4 Level 1)](#diagram-konteks-c4-level-1)
+- [Diagram Container (C4 Level 2)](#diagram-container-c4-level-2)
+- [Struktur Backend](#struktur-backend)
+- [Middleware Pipeline](#middleware-pipeline)
+- [Alur Ingestion Data IoT](#alur-ingestion-data-iot)
+- [Alur Sesi Monitoring](#alur-sesi-monitoring)
+- [Arsitektur Modul](#arsitektur-modul)
+- [Shared Layer](#shared-layer)
 - [Arsitektur Socket.IO](#arsitektur-socketio)
 - [Arsitektur gRPC](#arsitektur-grpc)
+- [Discovery: mDNS & UDP](#discovery-mdns--udp)
 - [Logging](#logging)
+- [Pola Desain & Konvensi](#pola-desain--konvensi)
 
 ---
 
-## Gambaran Umum Sistem
+## Gambaran Umum
 
-Sistem BPM & SpO₂ Monitoring Dashboard adalah aplikasi **real-time monitoring** untuk memantau denyut jantung (BPM) dan saturasi oksigen (SpO₂) pasien. Sistem ini mengadopsi arsitektur **client-server** dengan komunikasi **REST API** untuk operasi CRUD dan **WebSocket (Socket.IO)** untuk data real-time.
+Sistem BPM & SpO₂ Monitoring Dashboard adalah aplikasi **client-server** untuk pemantauan vital sign real-time:
+
+- **IoT Devices (ESP8266/ESP32 + MAX30100)** — membaca BPM & SpO₂, mengirim via HTTP POST.
+- **Backend (Express + TypeScript)** — REST API, Socket.IO, gRPC, Prisma ORM.
+- **Frontend (React SPA)** — dashboard admin real-time.
+- **Database** — SQLite (dev) / PostgreSQL (prod).
 
 ### Prinsip Arsitektur
 
-1. **Separation of Concerns** — Setiap modul memiliki tanggung jawab yang jelas
-2. **Real-Time First** — Data vital sign diproses dan didistribusikan secara real-time
-3. **Security by Design** — Autentikasi JWT, API key untuk ESP32, validasi input
-4. **Observability** — Logging terstruktur dengan Winston, audit trail
-5. **Database Abstraction** — Prisma ORM sebagai abstraksi database
+1. **Separation of Concerns** — setiap modul memiliki tanggung jawab jelas.
+2. **Real-Time First** — data vital sign diproses & disebarkan real-time.
+3. **Security by Design** — JWT untuk admin, API key untuk device, validasi input.
+4. **Observability** — logging Winston + audit trail.
+5. **Database Abstraction** — Prisma ORM.
 
 ---
 
-## Diagram C4 — Level 1: Context
+## Diagram Konteks (C4 Level 1)
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     BPM & SpO₂ Monitoring Dashboard                         │
-│                                                                             │
-│  ┌─────────────┐  ┌──────────────────┐  ┌────────────────────────────────┐ │
-│  │   Admin      │  │     Dokter       │  │      Perawat                   │ │
-│  │  (User)      │  │    (User)        │  │      (User)                    │ │
-│  └──────┬───────┘  └────────┬─────────┘  └───────────────┬────────────────┘ │
-│         │                  │                             │                  │
-│         └──────────────────┼─────────────────────────────┘                  │
-│                            │                                                │
-│                   ┌────────▼────────┐                                      │
-│                   │  BPM & SpO₂     │                                      │
-│                   │  Monitoring     │                                      │
-│                   │  Dashboard      │                                      │
-│                   │  (System)       │                                      │
-│                   └────────┬────────┘                                      │
-│                            │                                                │
-│                   ┌────────▼────────┐                                      │
-│                   │  ESP32 Device   │                                      │
-│                   │  (IoT Sensor)   │                                      │
-│                   └─────────────────┘                                      │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Diagram C4 — Level 2: Container
-
-```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                            BPM & SpO₂ Monitoring Dashboard                       │
-│                                                                                  │
-│  ┌──────────────────────────────────┐  ┌─────────────────────────────────────┐  │
-│  │  Single Page Application (React) │  │  Node.js Backend (Express 5)        │  │
-│  │                                  │  │                                     │  │
-│  │  ┌────────────────────────────┐  │  │  ┌───────────────────────────────┐  │  │
-│  │  │  Pages:                    │  │  │  │  Modules:                    │  │  │
-│  │  │  • Login                   │  │  │  │  • Auth Module               │  │  │
-│  │  │  • Dashboard               │  │  │  │  • Dashboard Module          │  │  │
-│  │  │  • Monitoring              │  │  │  │  • Patients Module           │  │  │
-│  │  │  • Pasien (CRUD)           │  │  │  │  • Monitoring Module         │  │  │
-│  │  │  • Riwayat                 │  │  │  │  • Reports Module            │  │  │
-│  │  │  • Laporan                 │  │  │  │  • Settings Module           │  │  │
-│  │  │  • Pengaturan              │  │  │  └───────────────────────────────┘  │  │
-│  │  └────────────────────────────┘  │  │                                     │  │
-│  │  ┌────────────────────────────┐  │  │  ┌───────────────────────────────┐  │  │
-│  │  │  Services:                 │  │  │  │  Socket.IO Handler            │  │  │
-│  │  │  • api.ts (Axios)          │──┼──┼──│  • esp32:reading             │  │  │
-│  │  │  • socket.service.ts       │──┼──┼──│  • monitoring:update         │  │  │
-│  │  │  • auth, dashboard, ...    │  │  │  │  • monitoring:alert          │  │  │
-│  │  └────────────────────────────┘  │  │  └───────────────────────────────┘  │  │
-│  │  ┌────────────────────────────┐  │  │                                     │  │
-│  │  │  State:                    │  │  │  ┌───────────────────────────────┐  │  │
-│  │  │  • React Query (server)    │  │  │  │  Middleware:                 │  │  │
-│  │  │  • AuthContext (client)    │  │  │  │  • JWT Auth                 │  │  │
-│  │  └────────────────────────────┘  │  │  │  • CORS + Helmet            │  │  │
-│  │                                   │  │  │  • Rate Limiting            │  │  │
-│  │  Port: 5173                      │  │  │  • Request Logger           │  │  │
-│  │                                   │  │  │  • Global Error Handler    │  │  │
-│  └──────────────────────────────────┘  │  └───────────────────────────────┘  │  │
-│                                         │                                     │  │
-│                                         │  ┌───────────────────────────────┐  │  │
-│                                         │  │  gRPC Services (optional)     │  │  │
-│                                         │  │  • AuthService               │  │  │
-│                                         │  │  • DashboardService          │  │  │
-│                                         │  │  • PatientService            │  │  │
-│                                         │  │  • MonitoringService         │  │  │
-│                                         │  │  • ReportService             │  │  │
-│                                         │  │  • SettingsService           │  │  │
-│                                         │  └───────────────────────────────┘  │  │
-│                                         │                                     │  │
-│                                         │  Port: 5000 (HTTP+WS)              │  │
-│                                         │  Port: 50051 (gRPC)                │  │
-│                                         └─────────────────────────────────────┘  │
-│                                                    │                             │
-│                                                    ▼                             │
-│                                         ┌──────────────────────┐                │
-│                                         │  Database (SQLite/   │                │
-│                                         │  PostgreSQL)         │                │
-│                                         │                      │                │
-│                                         │  7 Models:           │                │
-│                                         │  • Admin             │                │
-│                                         │  • Patient           │                │
-│                                         │  • Reading           │                │
-│                                         │  • MonitoringSession │                │
-│                                         │  • Setting           │                │
-│                                         │  • Esp32Device       │                │
-│                                         │  • AuditLog          │                │
-│                                         └──────────────────────┘                │
-└──────────────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│                        BPM & SpO₂ Monitoring                           │
+│                                                                        │
+│   ┌──────────────┐   ┌─────────────────┐   ┌─────────────────────┐    │
+│   │    Admin      │   │  ESP8266/ESP32  │   │  ESP32 Devices      │    │
+│   │  (Petugas)    │   │  + MAX30100     │   │  (multi-device)     │    │
+│   │  via Browser  │   │  (satu device)  │   │                     │    │
+│   └──────┬────────┘   └────────┬────────┘   └──────────┬──────────┘    │
+│          │                     │                        │               │
+│          │  HTTP + WS          │  HTTP POST             │  HTTP POST    │
+│          ▼                     ▼                        ▼               │
+│   ┌─────────────────────────────────────────────────────────────┐      │
+│   │                  BPM & SpO₂ Monitoring Dashboard             │      │
+│   │              (Backend Express + Socket.IO + gRPC)            │      │
+│   └───────────────────────────┬─────────────────────────────────┘      │
+│                               │                                        │
+│                        ┌──────▼──────┐                                 │
+│                        │  Database   │                                 │
+│                        │ (SQLite /   │                                 │
+│                        │ PostgreSQL) │                                 │
+│                        └─────────────┘                                 │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Alur Permintaan HTTP
-
-### Alur CRUD (Contoh: Membuat Pasien Baru)
+## Diagram Container (C4 Level 2)
 
 ```
-Browser                          Frontend                          Backend                       Database
-  │                                │                                │                              │
-  │  1. Isi form pasien           │                                │                              │
-  │──────────────────────────────▶│                                │                              │
-  │                                │                                │                              │
-  │                                │  2. POST /api/v1/patients      │                              │
-  │                                │     Authorization: Bearer JWT  │                              │
-  │                                │──────────────────────────────▶│                              │
-  │                                │                                │                              │
-  │                                │                                │  3. Verify JWT (auth.ts)     │
-  │                                │                                │     • Decode token           │
-  │                                │                                │     • Verify signature       │
-  │                                │                                │     • Check admin exists     │
-  │                                │                                │                              │
-  │                                │                                │  4. Validate input           │
-  │                                │                                │     • Name (min 2 chars)     │
-  │                                │                                │     • Gender (L/P)           │
-  │                                │                                │     • NIK (16 digits)        │
-  │                                │                                │     • BloodType (A/B/AB/O)   │
-  │                                │                                │     • Height (50-250)        │
-  │                                │                                │     • Weight (2-300)         │
-  │                                │                                │                              │
-  │                                │                                │  5. INSERT INTO Patient     │
-  │                                │                                │─────────────────────────────▶│
-  │                                │                                │                              │
-  │                                │                                │  6. INSERT INTO AuditLog    │
-  │                                │                                │     (CREATE action)         │
-  │                                │                                │─────────────────────────────▶│
-  │                                │                                │                              │
-  │                                │  7. Response 201              │                              │
-  │                                │     { success, data, msg }    │                              │
-  │                                │◀──────────────────────────────│                              │
-  │                                │                                │                              │
-  │  8. Tampilkan notifikasi       │                                │                              │
-  │◀───────────────────────────────│                                │                              │
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      BPM & SpO₂ Monitoring Dashboard                     │
+│                                                                          │
+│  ┌──────────────────────────┐        ┌────────────────────────────────┐ │
+│  │  Single Page App (React) │        │  Node.js Backend (Express 5)   │ │
+│  │  Port: 5173              │        │  Port: 5000 (HTTP+WS)          │ │
+│  │                          │        │  Port: 50051 (gRPC)            │ │
+│  │  Pages:                  │        │                                │ │
+│  │  • Login, Dashboard      │        │  Modules:                      │ │
+│  │  • Monitoring (+Detail)  │        │  • Auth                       │ │
+│  │  • Pasien (List/Detail/  │        │  • Dashboard                  │ │
+│  │    Create/Edit)          │        │  • Patients                   │ │
+│  │  • Riwayat, Laporan      │        │  • Monitoring (sessions)      │ │
+│  │  • Perangkat, Pengaturan │        │  • Readings (ingestion)       │ │
+│  │                          │        │  • Reports (PDF/Excel)        │ │
+│  │  Services (Axios +       │        │  • Settings                   │ │
+│  │  socket.io-client)       │        │  • Devices                    │ │
+│  └───────────┬──────────────┘        │                                │ │
+│              │ REST /api/v1/*        │  Middleware:                  │ │
+│              │ Socket.IO events      │  • JWT Auth, Helmet, CORS     │ │
+│              ▼                       │  • Rate Limiting, Request Log │ │
+│                                      │  • Global Error Handler       │ │
+│                                      │                                │ │
+│                                      │  Shared:                      │ │
+│                                      │  • status-calculator.ts       │ │
+│                                      │  • jwt.ts (blacklist)         │ │
+│                                      │  • app-error.ts               │ │
+│                                      │  • esp32-auth (socket+http)   │ │
+│                                      │  • mdns-advertiser, udp disc  │ │
+│                                      │  • grpc-auth                  │ │
+│                                      │                                │ │
+│                                      │  gRPC Server (opsional):      │ │
+│                                      │  Auth/Dashboard/Patient/      │ │
+│                                      │  Monitoring/Report/Settings   │ │
+│                                      └──────────────┬─────────────────┘ │
+│                                                     │                   │
+│                                                     ▼                   │
+│                                      ┌──────────────────────────────┐   │
+│                                      │  Prisma ORM → Database       │   │
+│                                      │  7 models (lihat database.md)│   │
+│                                      └──────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Middleware Pipeline
+---
 
-Setiap permintaan HTTP melewati middleware pipeline berikut:
+## Struktur Backend
+
+```
+backend/
+├── prisma/
+│   ├── schema.prisma          # Definisi 7 model database
+│   ├── seed.ts                # Data contoh (admin, pasien, sesi, dsb.)
+│   └── dev.db                 # SQLite (development)
+├── proto/
+│   ├── health.proto           # Definsi protobuf health
+│   └── monitoring.proto       # Definisi protobuf layanan inti
+├── src/
+│   ├── index.ts               # Entry point (start server + mDNS)
+│   ├── config/
+│   │   ├── env.ts             # Validasi environment variables
+│   │   ├── database.ts        # Prisma client singleton
+│   │   └── security.ts        # CORS, Helmet, Rate Limit config
+│   ├── server/
+│   │   ├── index.ts           # Express + Socket.IO setup
+│   │   └── middleware/
+│   │       ├── auth.ts        # JWT auth middleware (admin)
+│   │       ├── error-handler.ts
+│   │       └── request-logger.ts  # Winston logger
+│   ├── shared/
+│   │   ├── app-error.ts       # Error classes (AppError, NotFound, dsb.)
+│   │   ├── jwt.ts             # JWT utilities + blacklist
+│   │   ├── status-calculator.ts   # Logika threshold BPM/SpO₂
+│   │   ├── types.ts           # Tipe bersama
+│   │   ├── auth-middleware.ts
+│   │   ├── grpc-auth.ts
+│   │   ├── esp32-auth-middleware.ts  # Auth Socket.IO device
+│   │   ├── esp32-http-auth.ts        # Auth HTTP device (headers)
+│   │   ├── mdns-advertiser.ts        # Publikasi mDNS bpm-server.local
+│   │   └── udp-discovery.ts          # UDP broadcast discovery (port 5500)
+│   ├── socket/
+│   │   └── handler.ts         # Event Socket.IO admin-facing
+│   ├── grpc/
+│   │   ├── client.ts          # Factory gRPC client
+│   │   ├── server.ts          # Setup gRPC server
+│   │   └── handlers/          # Implementasi handler gRPC
+│   │       ├── auth-handler.ts
+│   │       ├── dashboard-handler.ts
+│   │       ├── patient-handler.ts
+│   │       ├── monitoring-handler.ts
+│   │       ├── report-handler.ts
+│   │       └── settings-handler.ts
+│   └── modules/
+│       ├── auth/              # login, logout, me
+│       ├── dashboard/         # statistik agregat
+│       ├── patients/          # CRUD pasien
+│       ├── monitoring/        # sesi + riwayat
+│       ├── readings/          # ingestion data device
+│       ├── reports/           # laporan + ekspor PDF/Excel
+│       ├── settings/          # pengaturan, profil, password
+│       └── devices/           # CRUD perangkat ESP32
+└── ...
+```
+
+---
+
+## Middleware Pipeline
+
+Setiap permintaan HTTP melewati pipeline berikut (dari `server/index.ts`):
 
 ```
 Request Masuk
     │
     ▼
-┌──────────────┐
-│   Helmet     │  → Security headers (CSP, HSTS, XSS, dll)
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│   CORS       │  → Cross-Origin Resource Sharing
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│   JSON Parser│  → Body parsing (1mb limit)
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│Rate Limiter  │  → 200 req/15min global, 20 req/15min auth
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│Req Logger    │  → Winston logging (method, url, status, duration)
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ JWT Auth     │  → Verify Bearer token (kecuali route publik)
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│Route Handler │  → Controller logic
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│Error Handler │  → Global error handling
-└──────────────┘
+┌────────────────────┐
+│ Helmet             │  → Security headers (di server/index.ts)
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
+│ CORS               │  → corsOptions (config/security.ts)
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
+│ express.json()     │  → Body parsing (limit 1mb)
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
+│ Global Rate Limit  │  → 200 req / 15 menit untuk /api/
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
+│ Auth Rate Limit    │  → 10 req / 15 menit untuk /api/v1/auth/login
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
+│ Request Logger     │  → Winston (method, url, status, durasi)
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
+│ Route Modules      │  → /api/v1/{auth,dashboard,patients,monitoring,
+│                     │    reports,settings,devices,readings}
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
+│ ESP32 HTTP Auth    │  → Khusus POST /api/v1/readings/device
+│ (esp32-http-auth)  │    (x-api-key + x-device-id)
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
+│ JWT Auth           │  → authenticate() untuk semua route admin
+│ (auth.ts)          │
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
+│ Route Handler      │  → Controller logic
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
+│ Error Handler      │  → globalErrorHandler
+└────────────────────┘
 ```
 
 ---
 
-## Alur Data Real-Time
+## Alur Ingestion Data IoT
 
-### Dari ESP32 ke Semua Admin Client
-
-```
-  ┌──────────┐                          ┌───────────────────┐                    ┌──────────────┐
-  │  ESP32   │                          │  Backend Server   │                    │  Admin Client │
-  │ (Sensor) │                          │  (Socket.IO)      │                    │  (Dashboard)  │
-  └────┬─────┘                          └─────────┬─────────┘                    └──────┬────────┘
-       │                                         │                                      │
-       │  Socket.IO Connection                    │                                      │
-       │  auth: { deviceId, apiKey }              │                                      │
-       │────────────────────────────────────────▶│                                      │
-       │                                         │                                      │
-       │  1. esp32:reading                       │                                      │
-       │     { deviceId, apiKey,                  │                                      │
-       │       patientId, bpm, spo2 }             │                                      │
-       │────────────────────────────────────────▶│                                      │
-       │                                         │                                      │
-       │                                         │  2. Validasi Device                   │
-       │                                         │     • Cari device by deviceId         │
-       │                                         │     • Cek isActive                    │
-       │                                         │     • Cocokkan apiKey                 │
-       │                                         │     • Validasi range BPM (30-250)     │
-       │                                         │     • Validasi range SpO₂ (50-100)    │
-       │                                         │     • Validasi patientId              │
-       │                                         │                                      │
-       │                                         │  3. Hitung Status                    │
-       │                                         │     • bpmStatus: BRADICARDIA /        │
-       │                                         │       NORMAL / TACHY_RINGAN /        │
-       │                                         │       TACHY_BERAT                    │
-       │                                         │     • spo2Status: NORMAL /            │
-       │                                         │       HIPOKSEMIA_*                    │
-       │                                         │     • status: NORMAL / WASPADA /      │
-       │                                         │       DARURAT                        │
-       │                                         │                                      │
-       │                                         │  4. Auto-create session if needed    │
-       │                                         │     (cari sesi ACTIVE atau buat baru) │
-       │                                         │                                      │
-       │                                         │  5. Simpan Reading ke database        │
-       │                                         │──────────────────────────────────    │
-       │                                         │                                      │
-       │  6. esp32:ack                           │                                      │
-       │     { readingId, status }               │                                      │
-       │◀────────────────────────────────────────│                                      │
-       │                                         │                                      │
-       │                                         │  7. monitoring:update                 │
-       │                                         │     { type: 'new_reading',            │
-       │                                         │       reading: {...} }                │
-       │                                         │─────────────────────────────────────▶│
-       │                                         │                                      │
-       │                                         │  8. (Jika alert) monitoring:alert     │
-       │                                         │     { patientId, patientName,         │
-       │                                         │       reading, message, timestamp }   │
-       │                                         │─────────────────────────────────────▶│
-       │                                         │                                      │
-       │                                         │  9. Update dashboard UI              │
-       │                                         │     (real-time chart updates)         │
-```
-
-### Threshold Alert Logic
+Perangkat ESP8266 mengirim data vital sign melalui **HTTP POST** (bukan Socket.IO).
 
 ```
-Pembacaan Baru (bpm, spo2)
-       │
-       ▼
-┌────────────────┐
-│ Cek Threshold  │─── BPM < min_bpm (60)? ──▶ Alert: "BPM di bawah batas normal"
-│ Cache (5 menit)│─── BPM > max_bpm (100)? ──▶ Alert: "BPM di atas batas normal"
-└────────────────┘─── SpO₂ < min_spo2 (95)? ──▶ Alert: "SpO₂ di bawah batas normal"
-       │              ── Semua normal? ──▶ Tidak ada alert
-       ▼
-┌────────────────┐
-│ Composite      │─── NORMAL (BPM normal + SpO₂ normal)
-│ Status Check   │─── DARURAT (BRADICARDIA / TACHY_BERAT / HIPOKSEMIA_SEDANG+)
-└────────────────┘─── WASPADA (sisanya)
-       │
-       ▼
-Kirim monitoring:alert jika ada threshold violation ATAU status != NORMAL
+ESP8266 (MAX30100)                     Backend                          Database
+      │                                  │                                 │
+      │  1. Baca sensor BPM & SpO₂       │                                 │
+      │─────────────────────────────────▶│                                 │
+      │                                  │                                 │
+      │  2. POST /api/v1/readings/device │                                 │
+      │     Headers:                     │                                 │
+      │       x-api-key: <api key>       │                                 │
+      │       x-device-id: ESP32-...     │                                 │
+      │     Body: { bpm, spo2 }          │                                 │
+      │─────────────────────────────────▶│                                 │
+      │                                  │  3. esp32HttpAuth:              │
+      │                                  │     hash SHA-256 api key        │
+      │                                  │     cari Esp32Device (aktif)    │
+      │                                  │                                 │
+      │                                  │  4. Validasi body               │
+      │                                  │     bpm: 30–250                 │
+      │                                  │     spo2: 50–100                │
+      │                                  │                                 │
+      │                                  │  5. Cari sesi ACTIVE device tsb │
+      │                                  │────────────────────────────────▶│
+      │                                  │  6. Hitung status               │
+      │                                  │     (status-calculator.ts)      │
+      │                                  │                                 │
+      │                                  │  7. INSERT Reading              │
+      │                                  │────────────────────────────────▶│
+      │                                  │                                 │
+      │  8. HTTP 201 { readingId,status}│                                 │
+      │◀─────────────────────────────────│                                 │
+      │                                  │                                 │
+      │                                  │  9. Broadcast (Socket.IO):      │
+      │                                  │     monitoring:update           │
+      │                                  │     → room 'admins'             │
+      │                                  │     monitoring:alert (jika      │
+      │                                  │     threshold violation)        │
+      │                                  │────────────────────────────────▶│
+      │                                  │     (dashboard admin)           │
 ```
+
+**Catatan penting:**
+- Threshold cache di-load dari tabel `Setting` dan disegarkan setiap **5 menit**.
+- Jika tidak ada sesi ACTIVE untuk device, reading tetap disimpan dengan `sessionId: null`.
+- `patientId` diambil dari sesi aktif (bukan dari body request).
 
 ---
 
-## Arsitektur Modul (Clean Architecture)
+## Alur Sesi Monitoring
 
-Setiap modul di backend mengikuti pola **Controller + Routes** dengan Prisma sebagai data access layer.
+### Memulai Sesi
+```
+Admin → POST /api/v1/monitoring/session/start { patientId, deviceId }
+  1. Validasi patientId wajib
+  2. Cek apakah device sudah punya sesi ACTIVE (409 jika ya)
+  3. Validasi pasien ada
+  4. Buat MonitoringSession (status: ACTIVE, deviceId: ...)
+  5. Respond 201 dengan data sesi
+```
 
-### Struktur Modul
+### Mengakhiri Sesi
+```
+Admin → POST /api/v1/monitoring/session/stop { sessionId | deviceId }
+  1. Cari sesi (by sessionId atau by deviceId+ACTIVE)
+  2. Update status → COMPLETED, endTime = now
+  3. Backfill patientId ke readings di sesi tsb yang masih null
+  4. Respond dengan sesi + _count.readings
+```
+
+### Kaitkan Reading ke Sesi
+Saat device mengirim reading, backend mencari `MonitoringSession` dengan `deviceId = device.deviceId && status = ACTIVE`. Jika ditemukan, reading dikaitkan (`sessionId`, `patientId`).
+
+---
+
+## Arsitektur Modul
+
+Setiap modul mengikuti pola **Routes + Controller** dengan Prisma sebagai data access.
 
 ```
 modules/
-├── auth/              # Autentikasi
-│   ├── auth.routes.ts     # Route definitions
-│   └── auth.controller.ts # Business logic
-├── dashboard/         # Statistik dashboard
+├── auth/               # Autentikasi admin
+│   ├── auth.routes.ts
+│   └── auth.controller.ts
+├── dashboard/          # Statistik dashboard
 │   ├── dashboard.routes.ts
 │   └── dashboard.controller.ts
-├── patients/          # Manajemen pasien
+├── patients/           # CRUD pasien
 │   ├── patients.routes.ts
 │   └── patients.controller.ts
-├── monitoring/        # Data monitoring
+├── monitoring/         # Sesi monitoring + riwayat
 │   ├── monitoring.routes.ts
 │   └── monitoring.controller.ts
-├── reports/           # Laporan + export
+├── readings/           # Ingestion data device (HTTP)
+│   ├── readings.routes.ts
+│   └── readings.controller.ts
+├── reports/            # Laporan + ekspor
 │   ├── reports.routes.ts
 │   └── reports.controller.ts
-└── settings/          # Pengaturan sistem
-    ├── settings.routes.ts
-    └── settings.controller.ts
+├── settings/           # Pengaturan & admin profile
+│   ├── settings.routes.ts
+│   └── settings.controller.ts
+└── devices/            # CRUD perangkat ESP32
+    ├── devices.routes.ts
+    └── devices.controller.ts
 ```
 
-### Pattern Per Modul
+### Pola Per Modul
 
 ```
-┌─────────────────────────────────┐
-│          Routes                 │
-│  • Define HTTP endpoints        │
-│  • Attach middleware            │
-│  • Delegate to controller      │
-├─────────────────────────────────┤
-│         Controller              │
-│  • Request/response handling    │
-│  • Input validation             │
-│  • Business logic               │
-│  • Call Prisma ORM             │
-│  • Return formatted response    │
-├─────────────────────────────────┤
-│      Prisma ORM (shared)        │
-│  • Database queries             │
-│  • Transaction management       │
-│  • Relationship handling       │
-├─────────────────────────────────┤
-│         Database                │
-│  • SQLite (dev)                 │
-│  • PostgreSQL (prod)            │
-└─────────────────────────────────┘
-```
-
-### Shared Layer
-
-```
-shared/
-├── app-error.ts              # Custom error classes
-│   ├── AppError              # Base error
-│   ├── NotFoundError (404)   # Resource not found
-│   ├── UnauthorizedError     # Authentication failed
-│   ├── ForbiddenError (403)  # Access denied
-│   ├── ValidationError (400) # Input validation
-│   └── ConflictError (409)   # Duplicate resource
-│
-├── status-calculator.ts      # Threshold logic
-│   ├── calculateBpmStatus()
-│   ├── calculateSpo2Status()
-│   ├── calculateCompositeStatus()
-│   └── calculateStatuses()   # Convenience: all three
-│
-├── types.ts                  # Shared type definitions
-│   ├── BpmStatus, Spo2Status, CompositeStatus
-│   ├── VitalSignsInput, VitalSignsResult
-│   └── PaginationParams, PaginatedResult
-│
-├── jwt.ts                    # JWT utilities
-│   ├── generateAccessToken()
-│   ├── generateTokenPair()
-│   ├── verifyToken()
-│   ├── blacklistToken()
-│   └── isTokenBlacklisted()
-│
-└── esp32-auth-middleware.ts  # ESP32 Socket.IO auth
-    ├── hashApiKey()          # SHA-256 hashing
-    └── esp32SocketAuthMiddleware()
+┌──────────────────────────────┐
+│ Routes                       │
+│ • Definisikan endpoint HTTP  │
+│ • Attach middleware          │
+│ • Delegasikan ke controller  │
+├──────────────────────────────┤
+│ Controller                   │
+│ • Handling request/response  │
+│ • Validasi input             │
+│ • Business logic             │
+│ • Panggil Prisma ORM         │
+│ • Logging + audit log        │
+├──────────────────────────────┤
+│ Prisma ORM (shared)          │
+│ • Query database             │
+│ • Transaction                │
+├──────────────────────────────┤
+│ Database                     │
+│ • SQLite (dev)               │
+│ • PostgreSQL (prod)          │
+└──────────────────────────────┘
 ```
 
 ---
 
-## Database Schema
+## Shared Layer
 
-### Entity Relationship Diagram (Text)
-
-```
-┌──────────────────┐       ┌──────────────────────┐
-│      Admin       │       │       Patient         │
-├──────────────────┤       ├──────────────────────┤
-│ id (PK)          │       │ id (PK)              │
-│ name             │       │ patientId (UK)        │── P-001, P-002, ...
-│ email (UK)       │       │ name                 │
-│ passwordHash     │       │ nik (UK)             │── Encrypted at rest
-│ createdAt        │       │ gender               │── L / P
-│ updatedAt        │       │ birthDate            │
-└────────┬─────────┘       │ age                  │── Computed
-         │                 │ address              │
-         │ 1               │ phone                │
-         ▼                 │ bloodType            │── A, B, AB, O
-┌──────────────────┐       │ height (cm)          │
-│    AuditLog      │       │ weight (kg)          │
-├──────────────────┤       │ medicalHistory       │── Encrypted at rest
-│ id (PK)          │       │ doctorNote           │
-│ adminId (FK) ────┼───┘   │ createdAt            │
-│ patientId (FK)───┼────┘  │ updatedAt            │
-│ action           │       └──────────┬───────────┘
-│ details          │                  │ 1
-│ ipAddress        │                  │
-│ createdAt        │                  ▼
-└──────────────────┘       ┌──────────────────────┐
-                           │  MonitoringSession    │
-                     ┌─────├──────────────────────┤
-                     │     │ id (PK)              │
-                     │     │ patientId (FK) ───────┼───┘
-                     │     │ status               │── ACTIVE/COMPLETED/CANCELLED
-                     │     │ startTime            │
-                     │     │ endTime              │
-                     │     │ notes                │
-                     │     │ createdAt            │
-                     │     └──────────┬───────────┘
-                     │                │ 1
-                     │                │
-┌──────────────────┐ │                │
-│   Esp32Device    │ │                │
-├──────────────────┤ │                ▼
-│ id (PK)          │ │  ┌──────────────────────────┐
-│ deviceId (UK)    │ │  │        Reading            │
-│ apiKey           │ │  ├──────────────────────────┤
-│ label            │─┘  │ id (PK)                  │
-│ isActive         │    │ patientId (FK) ──────────┼──────┐
-│ createdAt        │    │ bpm                      │
-│ updatedAt        │    │ spo2                     │
-└──────────────────┘    │ bpmStatus                │── BRADICARDIA/NORMAL/...
-                        │ spo2Status               │── NORMAL/HIPOKSEMIA_*
-                        │ status                   │── NORMAL/WASPADA/DARURAT
-                        │ sessionId (FK) ──────────┼──────┘
-                        │ createdAt                │
-                        └──────────────────────────┘
-
-┌──────────────────────┐
-│       Setting         │
-├──────────────────────┤
-│ id (PK)              │
-│ key (UK)             │── min_bpm, max_bpm, min_spo2, max_spo2, ...
-│ value                │
-│ description          │
-│ updatedAt            │
-└──────────────────────┘
-```
-
-### Deskripsi Model
-
-#### 1. Admin
-
-Menyimpan data administrator sistem.
-
-| Field          | Tipe     | Constraints      | Deskripsi                        |
-|----------------|----------|------------------|----------------------------------|
-| `id`           | Int      | PK, Auto-increment | ID admin                      |
-| `name`         | String   | Required         | Nama admin                       |
-| `email`        | String   | Unique, Required | Email admin                      |
-| `passwordHash` | String   | Required         | Hash bcrypt (12 rounds)          |
-| `createdAt`    | DateTime | Default: now     | Waktu pembuatan                  |
-| `updatedAt`    | DateTime | Auto             | Waktu update                     |
-
-#### 2. Patient
-
-Menyimpan data pasien yang akan dipantau.
-
-| Field            | Tipe     | Constraints      | Deskripsi                        |
-|------------------|----------|------------------|----------------------------------|
-| `id`             | Int      | PK, Auto-increment | ID internal                   |
-| `patientId`      | String   | Unique, Required | ID pasien (format: P-001)        |
-| `name`           | String   | Required         | Nama pasien                      |
-| `nik`            | String?  | Unique           | NIK (terenkripsi di database)    |
-| `gender`         | String   | Required         | L / P                            |
-| `birthDate`      | DateTime | Required         | Tanggal lahir                    |
-| `age`            | Int      | Computed         | Usia (dihitung dari birthDate)   |
-| `address`        | String?  | -                | Alamat                           |
-| `phone`          | String?  | -                | No. telepon                      |
-| `bloodType`      | String?  | -                | Golongan darah (A/B/AB/O)        |
-| `height`         | Float?   | -                | Tinggi badan (cm)                |
-| `weight`         | Float?   | -                | Berat badan (kg)                 |
-| `medicalHistory` | String?  | -                | Riwayat medis (terenkripsi)      |
-| `doctorNote`     | String?  | -                | Catatan dokter                   |
-
-**Relasi:** Satu pasien memiliki banyak `Reading` dan `MonitoringSession`.
-
-#### 3. Reading (Vital Sign)
-
-Menyimpan setiap pembacaan BPM dan SpO₂.
-
-| Field        | Tipe     | Constraints         | Deskripsi                     |
-|--------------|----------|---------------------|-------------------------------|
-| `id`         | Int      | PK, Auto-increment  | ID pembacaan                  |
-| `patientId`  | Int      | FK → Patient.id     | ID pasien                     |
-| `bpm`        | Int      | Required            | Denyut jantung               |
-| `spo2`       | Int      | Required            | Saturasi oksigen              |
-| `bpmStatus`  | String   | Required            | BRADICARDIA/NORMAL/TACHY_*    |
-| `spo2Status` | String   | Required            | NORMAL/HIPOKSEMIA_*           |
-| `status`     | String   | Required, Indexed   | NORMAL/WASPADA/DARURAT        |
-| `sessionId`  | Int?     | FK → Session.id     | Sesi monitoring               |
-| `createdAt`  | DateTime | Default: now, Indexed | Waktu pembacaan             |
-
-**Index:** `(patientId, createdAt)` untuk query riwayat, `status` untuk filter, `createdAt` untuk range date.
-
-#### 4. MonitoringSession
-
-Menyimpan sesi monitoring untuk setiap pasien.
-
-| Field       | Tipe      | Constraints        | Deskripsi                    |
-|-------------|-----------|--------------------|------------------------------|
-| `id`        | Int       | PK, Auto-increment | ID sesi                      |
-| `patientId` | Int       | FK → Patient.id    | ID pasien                    |
-| `status`    | String    | Default: ACTIVE    | ACTIVE/COMPLETED/CANCELLED  |
-| `startTime` | DateTime  | Default: now       | Waktu mulai                  |
-| `endTime`   | DateTime? | -                  | Waktu selesai                |
-| `notes`     | String?   | -                  | Catatan sesi                 |
-
-**Index:** `(patientId, startTime)` untuk query sesi per pasien.
-
-#### 5. Setting
-
-Menyimpan konfigurasi sistem key-value.
-
-| Field         | Tipe     | Constraints | Deskripsi                       |
-|---------------|----------|-------------|---------------------------------|
-| `id`          | Int      | PK          | ID setting                      |
-| `key`         | String   | Unique      | Key (min_bpm, max_bpm, dll)     |
-| `value`       | String   | Required    | Value                           |
-| `description` | String?  | -           | Deskripsi                       |
-
-#### 6. Esp32Device
-
-Menyimpan data perangkat ESP32 yang terdaftar.
-
-| Field       | Tipe     | Constraints      | Deskripsi                     |
-|-------------|----------|------------------|-------------------------------|
-| `id`        | Int      | PK, Auto-increment | ID perangkat                |
-| `deviceId`  | String   | Unique, Required | ID unik perangkat              |
-| `apiKey`    | String   | Required         | SHA-256 hash dari API key     |
-| `label`     | String?  | -                | Label/lokasi perangkat        |
-| `isActive`  | Boolean  | Default: true    | Status aktif                  |
-
-#### 7. AuditLog
-
-Menyimpan log audit untuk semua aktivitas admin.
-
-| Field       | Tipe      | Constraints      | Deskripsi                     |
-|-------------|-----------|------------------|-------------------------------|
-| `id`        | Int       | PK, Auto-increment | ID log                     |
-| `adminId`   | Int       | FK → Admin.id    | ID admin                      |
-| `patientId` | Int?      | FK → Patient.id  | ID pasien (opsional)          |
-| `action`    | String    | Required         | VIEW/CREATE/UPDATE/DELETE     |
-| `details`   | String?   | -                | Detail aktivitas              |
-| `ipAddress` | String?   | -                | Alamat IP                     |
-| `createdAt` | DateTime  | Default: now, Indexed | Waktu aktivitas      |
-
----
-
-## Arsitektur Keamanan
-
-### 1. Autentikasi JWT
-
-```
-┌──────────────┐     ┌──────────────────┐     ┌──────────────┐
-│   Client     │     │   Backend        │     │  Database    │
-└──────┬───────┘     └────────┬─────────┘     └──────┬───────┘
-       │                      │                      │
-       │  POST /auth/login    │                      │
-       │  { email, password } │                      │
-       │─────────────────────▶│                      │
-       │                      │  Cari admin by email │
-       │                      │─────────────────────▶│
-       │                      │  Admin data          │
-       │                      │◀─────────────────────│
-       │                      │                      │
-       │                      │  bcrypt.compare()    │
-       │                      │                      │
-       │                      │  jwt.sign({          │
-       │                      │    adminId,          │
-       │                      │    email,            │
-       │                      │    iat,              │
-       │                      │    exp               │
-       │                      │  }, JWT_SECRET)      │
-       │                      │                      │
-       │  { token, admin }    │                      │
-       │◀─────────────────────│                      │
-```
-
-### 2. Lapisan Keamanan
-
-| Lapisan            | Teknologi                  | Konfigurasi                              |
-|--------------------|----------------------------|------------------------------------------|
-| Transport          | Helmet                     | CSP, HSTS (1 tahun), XSS, frameguard    |
-| CORS               | cors                       | Origin terbatas, credentials enabled     |
-| Rate Limiting      | express-rate-limit         | Global: 200/15min, Auth: 20/15min       |
-| Autentikasi        | JWT (HS256)                | Secret ≥ 64 chars, expiry 24h/7d        |
-| Password           | bcryptjs                   | Salt rounds: 12                          |
-| Validasi Input     | Manual di controller       | Tipe data, range, format                 |
-| Error Handling     | Global error handler       | Generic error di production              |
-| Logging            | Winston                    | Log ke file + console, rotate 5MB       |
-| Audit Trail        | AuditLog model             | Semua action CREATE/UPDATE/DELETE        |
-
-### 3. Autentikasi ESP32
-
-```
-┌─────────────┐          ┌─────────────────┐          ┌──────────────┐
-│   ESP32     │          │   Socket.IO     │          │  Database    │
-└──────┬──────┘          └────────┬────────┘          └──────┬───────┘
-       │                         │                          │
-       │  handshake auth:        │                          │
-       │  { deviceId, apiKey }   │                          │
-       │────────────────────────▶│                          │
-       │                         │  hashApiKey(apiKey)      │
-       │                         │  → SHA-256 hex            │
-       │                         │                          │
-       │                         │  Cari device by:         │
-       │                         │  deviceId + apiKeyHash   │
-       │                         │─────────────────────────▶│
-       │                         │  Device data             │
-       │                         │◀─────────────────────────│
-       │                         │                          │
-       │                         │  if !device → error      │
-       │                         │  if !isActive → error    │
-       │                         │                          │
-       │  socket connected       │                          │
-       │◀────────────────────────│                          │
-```
-
-### 4. Enkripsi Data Sensitif
-
-Field yang memerlukan enkripsi di database:
-
-| Field            | Model   | Metode Enkripsi        |
-|------------------|---------|------------------------|
-| `passwordHash`   | Admin   | bcrypt (one-way)       |
-| `nik`            | Patient | AES-256 (at rest)      |
-| `medicalHistory` | Patient | AES-256 (at rest)      |
-| `apiKey`         | ESP32   | SHA-256 (hash)         |
+| File | Fungsi |
+|------|--------|
+| `shared/app-error.ts` | `AppError` (base), `NotFoundError` (404), `UnauthorizedError` (401), `ForbiddenError` (403), `ValidationError` (400), `ConflictError` (409) |
+| `shared/jwt.ts` | `generateAccessToken`, `generateTokenPair`, `verifyToken`, `blacklistToken`, `isTokenBlacklisted` |
+| `shared/status-calculator.ts` | `calculateBpmStatus`, `calculateSpo2Status`, `calculateCompositeStatus`, `calculateDiseaseClassification`, `calculateStatuses` |
+| `shared/types.ts` | Tipe bersama (BpmStatus, Spo2Status, CompositeStatus, VitalSignsInput, dsb.) |
+| `shared/esp32-http-auth.ts` | Auth device via header HTTP (`x-device-id`, `x-api-key`) |
+| `shared/esp32-auth-middleware.ts` | Auth device pada handshake Socket.IO |
+| `shared/auth-middleware.ts` | Helper autentikasi admin |
+| `shared/grpc-auth.ts` | Autentikasi pada gRPC |
+| `shared/mdns-advertiser.ts` | Publikasi `bpm-server.local` + service `_bpm-monitor._tcp` |
+| `shared/udp-discovery.ts` | UDP broadcast discovery (port 5500) |
 
 ---
 
 ## Arsitektur Socket.IO
 
-### Koneksi dan Rooms
+### Koneksi & Autentikasi
 
 ```
-Socket.IO Server (Namespace: /)
+Socket.IO Server (namespace default)
 │
-├── Admin Clients (JWT Auth)
-│   │
-│   ├── Room: "admins" (broadcast channel)
-│   │   └── Menerima: monitoring:update, monitoring:alert
-│   │
-│   └── Room: "patient:{id}" (per-patient channel)
-│       ├── subscribe:patient → join room
-│       └── unsubscribe:patient → leave room
+├── Admin Clients (JWT token via auth/query)
+│   ├── join room "admins"
+│   └── subscribe:patient → join room "patient:{id}"
 │
-└── ESP32 Devices (Device Auth)
-    │
-    └── Tidak join room
-        ├── Mengirim: esp32:reading
-        └── Menerima: esp32:ack, esp32:error
+└── ESP32 Devices (apiKey via auth/query)  ← untuk koneksi WebSocket (legacy)
+    └── Di backend versi sekarang, data device dikirim via HTTP
 ```
 
-### Event Map
+Alur auth socket (`esp32-auth-middleware.ts`):
+1. Jika koneksi membawa JWT token valid → dianggap admin, `next()`.
+2. Jika tidak, cek `apiKey` → hash SHA-256 → cocokkan dengan `Esp32Device`.
+3. Jika keduanya gagal → tolak koneksi.
 
-| Event                    | Arah         | Trigger              | Penerima             |
-|--------------------------|--------------|----------------------|----------------------|
-| `esp32:reading`          | ESP32 → Server | Data vital baru    | Server               |
-| `esp32:ack`              | Server → ESP32  | Data tersimpan    | ESP32 sender         |
-| `esp32:error`            | Server → ESP32  | Validasi gagal    | ESP32 sender         |
-| `monitoring:update`      | Server → Client | Pembacaan baru    | All admin clients    |
-| `monitoring:alert`       | Server → Client | Threshold violation | All admin clients  |
-| `subscribe:patient`      | Client → Server | Subscribe pasien  | Server               |
-| `unsubscribe:patient`    | Client → Server | Unsubscribe       | Server               |
+### Event
+
+| Event | Arah | Trigger | Penerima |
+|-------|------|---------|----------|
+| `monitoring:update` | Server → Admin | Reading baru disimpan | room `admins` |
+| `monitoring:alert` | Server → Admin | Threshold violation | room `admins` |
+| `subscribe:patient` | Admin → Server | Subscribe pasien | Server |
+| `unsubscribe:patient` | Admin → Server | Unsubscribe pasien | Server |
+| `subscribed` / `unsubscribed` | Server → Admin | Konfirmasi | Client |
+| `disconnect` | - | Client putus | Server |
+
+Detail lengkap: lihat [Socket.IO / Real-Time](socketio.md).
 
 ---
 
 ## Arsitektur gRPC
 
-### Service Definitions
+Backend menyediakan layanan gRPC opsional (di `backend/proto/monitoring.proto` & `health.proto`):
 
-Backend mendefinisikan 6 service gRPC dalam file `proto/monitoring.proto`:
-
-| Service              | Methods                                               |
-|----------------------|-------------------------------------------------------|
-| `AuthService`        | `Login`, `Logout`, `GetCurrentAdmin`                  |
-| `DashboardService`   | `GetDashboardStats`                                   |
-| `PatientService`     | `ListPatients`, `GetPatient`, `CreatePatient`, `UpdatePatient`, `DeletePatient` |
-| `MonitoringService`  | `GetRealtimeMonitoring`, `GetMonitoringHistory`, `SaveReading` |
-| `ReportService`      | `GetDailyReport`, `GetMonthlyReport`, `ExportReport`  |
-| `SettingsService`    | `GetSettings`, `UpdateSettings`                       |
-
-### Alur Komunikasi gRPC
+| Service | Methods |
+|---------|---------|
+| `AuthService` | `Login`, `Logout`, `GetCurrentAdmin` |
+| `DashboardService` | `GetDashboardStats` |
+| `PatientService` | `ListPatients`, `GetPatient`, `CreatePatient`, `UpdatePatient`, `DeletePatient` |
+| `MonitoringService` | `GetRealtimeMonitoring`, `GetMonitoringHistory`, `SaveReading` |
+| `ReportService` | `GetDailyReport`, `GetMonthlyReport`, `ExportReport` |
+| `SettingsService` | `GetSettings`, `UpdateSettings` |
 
 ```
 Express Controller
     │
-    ├──→ (Direct Prisma) → Database [Default Path]
+    ├──→ (Prisma langsung) → Database     [Jalur default]
     │
-    └──→ gRPC Client → gRPC Server → Prisma → Database [Optional]
-         │
-         │  gRPC Server (port 50051)
-         │  ┌─────────────────────────┐
-         │  │ AuthHandler             │
-         │  │ DashboardHandler        │
-         │  │ PatientHandler          │
-         │  │ MonitoringHandler       │
-         │  │ ReportHandler           │
-         │  │ SettingsHandler         │
-         │  └─────────────────────────┘
+    └──→ gRPC Client → gRPC Server → Prisma → Database  [Opsional]
+          gRPC Server: port 50051
 ```
+
+- **Client**: `src/grpc/client.ts`
+- **Server**: `src/grpc/server.ts`
+- **Handlers**: `src/grpc/handlers/*.ts`
+
+---
+
+## Discovery: mDNS & UDP
+
+### mDNS Advertiser
+- Backend mempublikasikan dirinya sebagai host `bpm-server.local` dan service `_bpm-monitor._tcp` (port `env.port`).
+- ESP8266 dapat menemukan backend tanpa konfigurasi IP manual.
+- Dijalankan saat server start (`index.ts` → `startMdnsAdvertising()`).
+- Memerlukan paket `bonjour-service`.
+
+### UDP Discovery (opsional)
+- Backend mendengarkan UDP broadcast di port `5500`.
+- ESP8266 mengirim pesan `"BPM-DISCOVERY"` → backend merespons `{"type":"BPM-SERVER","host":...,"port":...}`.
+- Belum aktif default di firmware (firmware memakai mDNS/DNS).
 
 ---
 
 ## Logging
 
-### Winston Logger — Konfigurasi
+### Winston Logger — Transport
 
 ```
 Winston Logger
-│
-├── Console Transport
-│   └── Level: debug (dev) / info (prod)
-│   └── Format: colorized, timestamp
-│
-├── File Transport (error)
-│   ├── Filename: logs/error.log
-│   ├── Level: error
-│   ├── Max size: 5MB
-│   └── Max files: 5
-│
-└── File Transport (combined)
-    ├── Filename: logs/combined.log
-    ├── Level: info
-    ├── Max size: 5MB
-    └── Max files: 10
+├── Console    → level debug (dev) / info (prod), colorized
+├── File error → logs/error.log, max 5MB, max 5 files
+└── File combined → logs/combined.log, max 5MB, max 10 files
 ```
 
-### Log Format
+### Yang Di-Log
+- **HTTP requests** — method, URL, status, durasi
+- **Database operations** — query (mode dev)
+- **Socket events** — connect, disconnect, error
+- **Autentikasi** — login/logout, ESP32 auth (sukses/gagal)
+- **CRUD operations** — patient, device, settings
+- **Ingestion** — reading tersimpan (`[READINGS] Data tersimpan`)
 
+Contoh:
 ```
-2026-07-07 10:30:00 [INFO] GET /api/v1/patients → 200 (45ms)
-2026-07-07 10:30:00 [WARN] POST /api/v1/auth/login → 401 (12ms)
-2026-07-07 10:30:01 [ERROR] Unhandled Rejection: some error
+2026-08-06 10:30:00 [INFO] GET /api/v1/patients → 200 (45ms)
+2026-08-06 10:30:00 [WARN] ESP32 HTTP auth rejected { deviceId, ip }
+2026-08-06 10:30:01 [INFO] [READINGS] Data tersimpan { ... }
 ```
-
-Log mencakup:
-- **HTTP Requests:** Method, URL, status code, response time
-- **Database Operations:** Query execution (development mode)
-- **Socket Events:** Connection, disconnection, error
-- **Authentication:** Login/logout attempts
-- **CRUD Operations:** Patient/settings changes
 
 ---
 
-## Catatan Arsitektur
+## Pola Desain & Konvensi
 
-1. **SQLite untuk Development:** Database SQLite digunakan untuk kemudahan setup lokal. Untuk production, migrasikan ke PostgreSQL.
+1. **Controller + Routes** — tanpa service layer terpisah; logika langsung di controller.
+2. **AppError** — semua error operasional menggunakan `AppError` agar global handler bisa membedakan error yang diharapkan vs bug.
+3. **Status calculator terpusat** — klasifikasi BPM/SpO₂/status/disease harus selalu melalui `shared/status-calculator.ts`.
+4. **Audit log** — operasi CREATE/UPDATE/DELETE pada pasien, device, dan settings dicatat.
+5. **Response format seragam** — `{ success, data, message, error? }`.
+6. **Threshold cache** — dibaca dari DB, di-cache 5 menit, untuk performa.
+7. **Token blacklist in-memory** — perlu Redis jika multi-instance.
 
-2. **In-Memory Token Blacklist:** Blacklist token disimpan dalam memory. Untuk production dengan multiple instance, gunakan Redis.
+---
 
-3. **Threshold Cache:** Ambang batas BPM/SpO₂ di-cache setiap 5 menit untuk mengurangi query ke database.
+## Lanjutkan Membaca
 
-4. **Auto-Create Session:** Jika ESP32 mengirim data tanpa sessionId, sistem akan mencari sesi ACTIVE atau membuat sesi baru secara otomatis.
-
-5. **Audit Trail:** Setiap operasi CREATE, UPDATE, DELETE pada pasien dan settings dicatat dalam AuditLog untuk kepatuhan dan troubleshooting.
+- [Overview](overview.md)
+- [REST API](api.md)
+- [Socket.IO / Real-Time](socketio.md)
+- [Database](database.md)
+- [Keamanan](security.md)

@@ -1,7 +1,8 @@
 # Dokumentasi API — BPM & SpO₂ Monitoring Dashboard
 
-**Base URL:** `http://localhost:5000/api/v1`
+**Base URL (Development):** `http://localhost:5000/api/v1`
 **Base URL (Production):** `https://{domain}/api/v1`
+**Health Check:** `GET http://localhost:5000/api/health`
 
 ---
 
@@ -17,18 +18,20 @@
   - [4. Monitoring](#4-monitoring)
   - [5. Reports](#5-reports)
   - [6. Settings](#6-settings)
-  - [7. Health Check](#7-health-check)
-- [Socket.IO Events](#socketio-events)
+  - [7. Devices](#7-devices)
+  - [8. Readings (Ingestion Device)](#8-readings-ingestion-device)
+  - [9. Health Check](#9-health-check)
 - [Status Thresholds](#status-thresholds)
+- [Rate Limiting](#rate-limiting)
+- [Catatan Penting](#catatan-penting)
 
 ---
 
 ## Format Respons
 
-Semua endpoint REST mengembalikan respons dalam format JSON seragam:
+Semua endpoint REST mengembalikan JSON seragam:
 
 ### Sukses
-
 ```json
 {
   "success": true,
@@ -38,7 +41,6 @@ Semua endpoint REST mengembalikan respons dalam format JSON seragam:
 ```
 
 ### Error
-
 ```json
 {
   "success": false,
@@ -48,8 +50,7 @@ Semua endpoint REST mengembalikan respons dalam format JSON seragam:
 }
 ```
 
-Untuk `ValidationError`, objek `error` berisi detail field yang gagal validasi:
-
+Untuk `ValidationError`, objek `error` berisi detail field:
 ```json
 {
   "success": false,
@@ -63,9 +64,6 @@ Untuk `ValidationError`, objek `error` berisi detail field yang gagal validasi:
 ```
 
 ### Pagination
-
-Endpoint yang mendukung pagination mengembalikan:
-
 ```json
 {
   "success": true,
@@ -86,46 +84,38 @@ Endpoint yang mendukung pagination mengembalikan:
 
 ## Autentikasi
 
-### JWT Bearer Token
-
-Sebagian besar endpoint memerlukan autentikasi menggunakan JWT Bearer token.
+Sebagian besar endpoint memerlukan JWT Bearer token.
 
 **Header:**
-
 ```
 Authorization: Bearer <token>
 ```
 
-**Cara Mendapatkan Token:**
+**Mendapatkan token:** login ke `POST /auth/login`.
 
-1. Login ke endpoint `POST /auth/login` dengan email dan password.
-2. Sistem akan mengembalikan token JWT dalam respons.
-3. Sertakan token di header `Authorization` untuk permintaan berikutnya.
+**Masa berlaku token:**
 
-**Masa Berlaku Token:**
+| Mode | Durasi |
+|------|--------|
+| Default | 24 jam |
+| Remember me | 7 hari |
 
-| Mode         | Durasi |
-|--------------|--------|
-| Default      | 24 jam |
-| Remember Me  | 7 hari |
-
-**Logout:**
-
-Token yang sudah logout akan dimasukkan ke dalam blacklist (in-memory) sehingga tidak dapat digunakan kembali.
+**Logout:** token di-blacklist sehingga tidak dapat dipakai lagi.
 
 ---
 
 ## Kode Error
 
-| HTTP Status | Kode Error              | Deskripsi                                        |
-|-------------|------------------------|--------------------------------------------------|
-| 400         | `VALIDATION_ERROR`      | Input tidak valid                                |
-| 401         | `UNAUTHORIZED`          | Token tidak valid atau telah kedaluwarsa         |
-| 403         | `FORBIDDEN`             | Akses ditolak                                    |
-| 404         | `NOT_FOUND`             | Resource tidak ditemukan                         |
-| 409         | `CONFLICT`              | Resource sudah ada (duplicate)                   |
-| 429         | `RateLimitError`        | Terlalu banyak permintaan                        |
-| 500         | `InternalServerError`   | Error internal server                            |
+| HTTP | Kode | Deskripsi |
+|------|------|-----------|
+| 400 | `VALIDATION_ERROR` | Input tidak valid |
+| 401 | `UNAUTHORIZED` | Token tidak valid / kedaluwarsa |
+| 401 | `INVALID_TOKEN`, `TOKEN_EXPIRED`, `TOKEN_NOT_ACTIVE`, `TOKEN_VERIFICATION_FAILED` | Detail kegagalan JWT |
+| 403 | `FORBIDDEN` | Akses ditolak |
+| 404 | `NOT_FOUND` | Resource tidak ditemukan |
+| 409 | `CONFLICT` | Resource sudah ada (duplicate) |
+| 429 | `RateLimitError` / `AuthRateLimitError` | Terlalu banyak permintaan |
+| 500 | `INTERNAL_ERROR` | Error internal server |
 
 ---
 
@@ -136,15 +126,12 @@ Token yang sudah logout akan dimasukkan ke dalam blacklist (in-memory) sehingga 
 ### 1. Auth
 
 #### 1.1 Login
-
 ```
 POST /auth/login
 ```
-
 **Autentikasi:** Tidak diperlukan
 
 **Request Body:**
-
 ```json
 {
   "email": "admin@monitoring-bpm.web.id",
@@ -153,71 +140,48 @@ POST /auth/login
 }
 ```
 
-| Field        | Tipe    | Wajib | Deskripsi                          |
-|-------------|---------|-------|------------------------------------|
-| `email`     | string  | Ya    | Email admin                        |
-| `password`  | string  | Ya    | Password admin                     |
-| `rememberMe`| boolean | Tidak | Perpanjang masa berlaku token (7d) |
+| Field | Tipe | Wajib | Deskripsi |
+|-------|------|-------|-----------|
+| `email` | string | Ya | Email admin |
+| `password` | string | Ya | Password |
+| `rememberMe` | boolean | Tidak | Perpanjang masa token (7d) |
 
 **Response 200:**
-
 ```json
 {
   "success": true,
   "data": {
     "token": "eyJhbGciOiJIUzI1NiIs...",
-    "admin": {
-      "id": 1,
-      "name": "Admin Dashboard",
-      "email": "admin@monitoring-bpm.web.id"
-    }
+    "admin": { "id": 1, "name": "Admin Dashboard", "email": "admin@monitoring-bpm.web.id" }
   },
   "message": "Login successful"
 }
 ```
 
-**Error Codes:**
-
-| Kode               | HTTP Status | Kondisi                              |
-|--------------------|-------------|--------------------------------------|
-| `VALIDATION_ERROR` | 400         | Email atau password tidak disertakan |
-| `UNAUTHORIZED`     | 401         | Email atau password salah            |
-| `AuthRateLimitError` | 429       | Terlalu banyak percobaan login       |
+**Error:** `VALIDATION_ERROR` (400), `UNAUTHORIZED` (401, email/password salah), `AuthRateLimitError` (429).
 
 ---
 
 #### 1.2 Logout
-
 ```
 POST /auth/logout
 ```
-
-**Autentikasi:** Wajib (JWT Bearer token)
-
-**Request Body:** Tidak diperlukan
+**Autentikasi:** Wajib
 
 **Response 200:**
-
 ```json
-{
-  "success": true,
-  "data": null,
-  "message": "Logout successful"
-}
+{ "success": true, "data": null, "message": "Logout successful" }
 ```
 
 ---
 
 #### 1.3 Get Current Admin
-
 ```
 GET /auth/me
 ```
-
-**Autentikasi:** Wajib (JWT Bearer token)
+**Autentikasi:** Wajib
 
 **Response 200:**
-
 ```json
 {
   "success": true,
@@ -237,15 +201,12 @@ GET /auth/me
 ### 2. Dashboard
 
 #### 2.1 Get Dashboard Statistics
-
 ```
 GET /dashboard
 ```
-
-**Autentikasi:** Wajib (JWT Bearer token)
+**Autentikasi:** Wajib
 
 **Response 200:**
-
 ```json
 {
   "success": true,
@@ -273,20 +234,11 @@ GET /dashboard
         "spo2Status": "HIPOKSEMIA_RINGAN",
         "status": "DARURAT",
         "createdAt": "2026-07-29T10:30:00.000Z",
-        "patient": {
-          "id": 6,
-          "patientId": "P-006",
-          "name": "Reka"
-        }
+        "patient": { "id": 6, "patientId": "P-006", "name": "Reka" }
       }
     ],
     "chartData": [
-      {
-        "hour": "08:00",
-        "avgBpm": 82,
-        "avgSpo2": 97,
-        "readingCount": 5
-      }
+      { "hour": "08:00", "avgBpm": 82, "avgSpo2": 97, "readingCount": 5 }
     ],
     "timestamp": "2026-07-29T10:30:00.000Z"
   },
@@ -296,45 +248,37 @@ GET /dashboard
 
 **Struktur Data:**
 
-| Field                                    | Tipe    | Deskripsi                                                      |
-|------------------------------------------|---------|----------------------------------------------------------------|
-| `totalPatients`                          | number  | Jumlah total pasien                                            |
-| `statusDistribution.normal`              | number  | Jumlah pasien dengan status Normal (latest reading)            |
-| `statusDistribution.waspada`             | number  | Jumlah pasien dengan status Waspada                            |
-| `statusDistribution.darurat`             | number  | Jumlah pasien dengan status Darurat                            |
-| `statusDistribution.tanpaData`           | number  | Jumlah pasien tanpa readings sama sekali                       |
-| `averages.avgBpm`                        | number  | Rata-rata BPM                                                  |
-| `averages.avgSpo2`                       | number  | Rata-rata SpO₂                                                 |
-| `averages.totalReadings`                 | number  | Total pembacaan yang digunakan untuk kalkulasi rata-rata       |
-| `averages.range`                         | string  | Rentang waktu data: `24h`, `168h` (7 hari), `all`, atau `none` |
-| `last10Readings[]`                       | array   | 10 pembacaan terbaru (dengan data pasien)                      |
-| `chartData[].hour`                       | string  | Jam (format HH:00)                                             |
-| `chartData[].avgBpm`                     | number  | Rata-rata BPM per jam                                          |
-| `chartData[].avgSpo2`                    | number  | Rata-rata SpO₂ per jam                                         |
-| `chartData[].readingCount`              | number  | Jumlah pembacaan per jam                                       |
+| Field | Tipe | Deskripsi |
+|-------|------|-----------|
+| `totalPatients` | number | Total pasien |
+| `statusDistribution.*` | number | Distribusi status pasien (dari reading terakhir tiap pasien) |
+| `statusDistribution.tanpaData` | number | Pasien tanpa reading |
+| `averages.avgBpm` / `avgSpo2` | number | Rata-rata BPM/SpO₂ |
+| `averages.totalReadings` | number | Jumlah reading yang dipakai |
+| `averages.range` | string | `24h`, `168h`, `all`, `none` |
+| `last10Readings[]` | array | 10 reading terbaru (seluruh waktu) |
+| `chartData[]` | array | Rata-rata per jam hari ini (`HH:00`) |
+
+> Strategi rata-rata: coba 24 jam → 7 hari → seluruh waktu.
 
 ---
 
 ### 3. Patients
 
-Semua endpoint Patient memerlukan autentikasi.
+Semua endpoint memerlukan autentikasi.
 
 #### 3.1 List Patients
-
 ```
 GET /patients?page=1&limit=10&search=budi
 ```
 
-**Query Parameters:**
+| Parameter | Tipe | Default | Deskripsi |
+|-----------|------|---------|-----------|
+| `page` | number | 1 | Halaman |
+| `limit` | number | 10 | Item/halaman (max 100) |
+| `search` | string | - | Cari nama atau patientId |
 
-| Parameter | Tipe    | Wajib | Default | Deskripsi                          |
-|-----------|---------|-------|---------|------------------------------------|
-| `page`    | number  | Tidak | 1       | Halaman                            |
-| `limit`   | number  | Tidak | 10      | Jumlah item per halaman (max 100)  |
-| `search`  | string  | Tidak | -       | Cari berdasarkan nama atau ID      |
-
-**Response 200:**
-
+**Response 200:** (item berisi data pasien + `readings` terbaru + `_count`)
 ```json
 {
   "success": true,
@@ -354,28 +298,16 @@ GET /patients?page=1&limit=10&search=budi
         "height": 170,
         "weight": 75,
         "medicalHistory": "Hipertensi stage 1, DM tipe 2",
-        "doctorNote": "Kontrol rutin tekanan darah dan gula darah",
+        "doctorNote": "Kontrol rutin",
         "createdAt": "2026-07-07T00:00:00.000Z",
         "updatedAt": "2026-07-07T00:00:00.000Z",
         "readings": [
-          {
-            "status": "NORMAL",
-            "bpm": 90,
-            "spo2": 97,
-            "createdAt": "2026-07-07T10:30:00.000Z"
-          }
+          { "status": "NORMAL", "bpm": 90, "spo2": 97, "createdAt": "..." }
         ],
-        "_count": {
-          "readings": 10
-        }
+        "_count": { "readings": 10 }
       }
     ],
-    "pagination": {
-      "page": 1,
-      "limit": 10,
-      "total": 5,
-      "totalPages": 1
-    }
+    "pagination": { "page": 1, "limit": 10, "total": 6, "totalPages": 1 }
   },
   "message": "Patients retrieved"
 }
@@ -384,264 +316,90 @@ GET /patients?page=1&limit=10&search=budi
 ---
 
 #### 3.2 Get Patient Detail
-
 ```
 GET /patients/:id
 ```
+`id` = ID internal pasien (integer).
 
-**Path Parameters:**
-
-| Parameter | Tipe   | Wajib | Deskripsi          |
-|-----------|--------|-------|--------------------|
-| `id`      | number | Ya    | ID pasien (integer)|
-
-**Response 200:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "patientId": "P-001",
-    "name": "Budi Santoso",
-    "nik": "3174011508800001",
-    "gender": "L",
-    "birthDate": "1980-08-15T00:00:00.000Z",
-    "age": 45,
-    "address": "Jl. Merdeka No. 10, Jakarta Pusat",
-    "phone": "081234567890",
-    "bloodType": "O",
-    "height": 170,
-    "weight": 75,
-    "medicalHistory": "Hipertensi stage 1, DM tipe 2",
-    "doctorNote": "Kontrol rutin tekanan darah dan gula darah",
-    "createdAt": "2026-07-07T00:00:00.000Z",
-    "updatedAt": "2026-07-07T00:00:00.000Z",
-    "readings": [ ... ],
-    "sessions": [ ... ],
-    "_count": {
-      "readings": 10
-    }
-  },
-  "message": "Patient retrieved"
-}
-```
-
-**Error Codes:**
-
-| Kode           | HTTP Status | Kondisi                 |
-|----------------|-------------|-------------------------|
-| `VALIDATION_ERROR` | 400    | ID pasien tidak valid   |
-| `NOT_FOUND`    | 404         | Pasien tidak ditemukan  |
+**Response 200:** data pasien + `readings` + `sessions` + `_count`.
+**Error:** `NOT_FOUND` (404) jika pasien tidak ditemukan.
 
 ---
 
 #### 3.3 Create Patient
-
 ```
 POST /patients
 ```
 
-**Request Body:**
+**Request Body & Validasi:**
 
-```json
-{
-  "name": "Siti Rahmawati",
-  "nik": "3201256712900002",
-  "gender": "P",
-  "birthDate": "1990-12-27",
-  "address": "Jl. Braga No. 25, Bandung",
-  "phone": "081298765432",
-  "bloodType": "A",
-  "height": 158,
-  "weight": 55,
-  "medicalHistory": "Asma bronkial",
-  "doctorNote": "Hindari pemicu asma"
-}
-```
+| Field | Tipe | Wajib | Validasi |
+|-------|------|-------|----------|
+| `name` | string | Ya | Min 2 karakter |
+| `nik` | string | Tidak | Tepat 16 digit, unique |
+| `gender` | string | Ya | `L` atau `P` |
+| `birthDate` | string | Ya | ISO 8601 |
+| `address` | string | Tidak | - |
+| `phone` | string | Tidak | - |
+| `bloodType` | string | Tidak | `A`, `B`, `AB`, `O` |
+| `height` | number | Tidak | 50–250 cm |
+| `weight` | number | Tidak | 2–300 kg |
+| `medicalHistory` | string | Tidak | - |
+| `doctorNote` | string | Tidak | - |
 
-**Validasi Field:**
+`patientId` dibuat otomatis (format `P-XXX`). Usia (`age`) dihitung otomatis dari `birthDate`.
 
-| Field            | Tipe    | Wajib | Validasi                                   |
-|------------------|---------|-------|--------------------------------------------|
-| `name`           | string  | Ya    | Minimal 2 karakter                         |
-| `nik`            | string  | Tidak | 16 digit angka, unique                     |
-| `gender`         | string  | Ya    | `L` atau `P`                               |
-| `birthDate`      | string  | Ya    | Format ISO 8601 (YYYY-MM-DD)               |
-| `address`        | string  | Tidak | -                                          |
-| `phone`          | string  | Tidak | -                                          |
-| `bloodType`      | string  | Tidak | `A`, `B`, `AB`, atau `O`                   |
-| `height`         | number  | Tidak | 50–250 cm                                  |
-| `weight`         | number  | Tidak | 2–300 kg                                   |
-| `medicalHistory` | string  | Tidak | -                                          |
-| `doctorNote`     | string  | Tidak | -                                          |
-
-**Response 201:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": 6,
-    "patientId": "P-006",
-    "name": "Siti Rahmawati",
-    ...
-  },
-  "message": "Patient created successfully"
-}
-```
+**Response 201:** data pasien yang dibuat.
 
 ---
 
 #### 3.4 Update Patient
-
 ```
 PUT /patients/:id
 ```
-
-**Path Parameters:**
-
-| Parameter | Tipe   | Wajib | Deskripsi          |
-|-----------|--------|-------|--------------------|
-| `id`      | number | Ya    | ID pasien (integer)|
-
-**Request Body:** (Partial update — semua field opsional)
-
-```json
-{
-  "name": "Siti Rahmawati Updated",
-  "phone": "0812111222333"
-}
-```
-
-**Response 200:**
-
-```json
-{
-  "success": true,
-  "data": { ... },
-  "message": "Patient updated successfully"
-}
-```
+Partial update — semua field opsional. Validasi sama seperti create.
+**Response 200:** data pasien yang diupdate.
 
 ---
 
 #### 3.5 Delete Patient
-
 ```
 DELETE /patients/:id
 ```
-
-**Path Parameters:**
-
-| Parameter | Tipe   | Wajib | Deskripsi          |
-|-----------|--------|-------|--------------------|
-| `id`      | number | Ya    | ID pasien (integer)|
-
 **Response 200:**
-
 ```json
-{
-  "success": true,
-  "data": null,
-  "message": "Patient deleted successfully"
-}
+{ "success": true, "data": null, "message": "Patient deleted successfully" }
 ```
-
-**Catatan:** Operasi delete akan menghapus semua data terkait (readings, sessions, audit logs) secara cascading.
+> Delete akan menghapus data terkait (readings, sessions, audit logs) secara cascading.
 
 ---
 
 ### 4. Monitoring
 
-Semua endpoint Monitoring memerlukan autentikasi.
+Semua endpoint memerlukan autentikasi.
 
 #### 4.1 Get Active Monitoring
-
 ```
 GET /monitoring
 ```
-
-Mengembalikan semua sesi monitoring yang aktif beserta pembacaan terbaru.
-
-**Response 200:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "items": [
-      {
-        "id": 1,
-        "patientId": 1,
-        "status": "ACTIVE",
-        "startTime": "2026-07-07T09:30:00.000Z",
-        "endTime": null,
-        "notes": "Pasien dalam observasi tekanan darah",
-        "createdAt": "2026-07-07T09:30:00.000Z",
-        "patient": {
-          "id": 1,
-          "patientId": "P-001",
-          "name": "Budi Santoso",
-          "gender": "L",
-          "age": 45
-        },
-        "readings": [
-          {
-            "id": 10,
-            "bpm": 90,
-            "spo2": 97,
-            "bpmStatus": "NORMAL",
-            "spo2Status": "NORMAL",
-            "status": "NORMAL",
-            "createdAt": "2026-07-07T10:30:00.000Z"
-          }
-        ],
-        "_count": {
-          "readings": 10
-        }
-      }
-    ],
-    "totalActive": 3
-  },
-  "message": "Active monitoring data retrieved"
-}
-```
+Mengembalikan semua sesi ACTIVE beserta reading terbaru.
+**Response 200:** `{ items: [...], totalActive: n }`
 
 ---
 
 #### 4.2 Get Realtime Data
-
 ```
 GET /monitoring/realtime
 ```
-
-Mengembalikan data terbaru untuk setiap pasien yang memiliki pembacaan.
-
+Data terbaru per pasien yang memiliki reading.
 **Response 200:**
-
 ```json
 {
   "success": true,
   "data": [
     {
-      "patient": {
-        "id": 1,
-        "patientId": "P-001",
-        "name": "Budi Santoso",
-        "gender": "L",
-        "age": 45
-      },
-      "latestReading": {
-        "id": 10,
-        "bpm": 90,
-        "spo2": 97,
-        "bpmStatus": "NORMAL",
-        "spo2Status": "NORMAL",
-        "status": "NORMAL",
-        "createdAt": "2026-07-07T10:30:00.000Z",
-        "sessionId": 1
-      },
+      "patient": { "id": 1, "patientId": "P-001", "name": "Budi Santoso", "gender": "L", "age": 45 },
+      "latestReading": { "id": 10, "bpm": 90, "spo2": 97, "bpmStatus": "NORMAL", "spo2Status": "NORMAL", "status": "NORMAL", "createdAt": "...", "sessionId": 1 },
       "activeSessionId": 1,
       "isMonitoring": true
     }
@@ -652,36 +410,127 @@ Mengembalikan data terbaru untuk setiap pasien yang memiliki pembacaan.
 
 ---
 
-#### 4.3 Get Monitoring History
-
+#### 4.3 Start Monitoring Session
 ```
-GET /monitoring/history?page=1&limit=20&startDate=2026-07-01&endDate=2026-07-07&status=NORMAL&patientId=1
+POST /monitoring/session/start
+```
+**Request Body:**
+```json
+{ "patientId": 1, "deviceId": "ESP32-ALPHA-001" }
 ```
 
-**Query Parameters:**
+| Field | Tipe | Wajib | Deskripsi |
+|-------|------|-------|-----------|
+| `patientId` | number | Ya | ID pasien |
+| `deviceId` | string | Tidak | ID device ESP32 |
 
-| Parameter    | Tipe    | Wajib | Default | Deskripsi                                        |
-|-------------|---------|-------|---------|--------------------------------------------------|
-| `page`       | number  | Tidak | 1       | Halaman                                          |
-| `limit`      | number  | Tidak | 20      | Item per halaman (max 200)                       |
-| `startDate`  | string  | Tidak | -       | Filter tanggal awal (ISO 8601)                   |
-| `endDate`    | string  | Tidak | -       | Filter tanggal akhir (ISO 8601)                  |
-| `status`     | string  | Tidak | -       | Filter status: `NORMAL`, `WASPADA`, `DARURAT`    |
-| `patientId`  | number  | Tidak | -       | Filter ID pasien                                 |
-| `bpmStatus`  | string  | Tidak | -       | Filter status BPM (lihat tabel di bawah)         |
-| `spo2Status` | string  | Tidak | -       | Filter status SpO₂ (lihat tabel di bawah)        |
+**Response 201:** sesi dibuat (status `ACTIVE`).
+**Error:**
+- `409` jika device sudah punya sesi ACTIVE
+- `404` jika pasien tidak ditemukan
+- `400` jika `patientId` kosong
 
-**Status BPM valid:** `BRADICARDIA`, `NORMAL`, `TACHY_RINGAN`, `TACHY_BERAT`
+---
 
-**Status SpO₂ valid:** `NORMAL`, `HIPOKSEMIA_RINGAN`, `HIPOKSEMIA_SEDANG`, `HIPOKSEMIA_BERAT`
+#### 4.4 Stop Monitoring Session
+```
+POST /monitoring/session/stop
+```
+**Request Body:**
+```json
+{ "sessionId": 1 }
+```
+atau
+```json
+{ "deviceId": "ESP32-ALPHA-001" }
+```
 
 **Response 200:**
-
 ```json
 {
   "success": true,
   "data": {
-    "items": [
+    "id": 1,
+    "patientId": 1,
+    "status": "COMPLETED",
+    "startTime": "...",
+    "endTime": "...",
+    "_count": { "readings": 60 }
+  },
+  "message": "Sesi monitoring selesai. Total 60 data terekam."
+}
+```
+
+---
+
+#### 4.5 List Monitoring Sessions
+```
+GET /monitoring/sessions?status=COMPLETED&patientId=1&page=1&limit=20
+```
+
+| Parameter | Tipe | Default | Deskripsi |
+|-----------|------|---------|-----------|
+| `status` | string | - | `ACTIVE`, `COMPLETED`, `CANCELLED` |
+| `patientId` | number | - | Filter pasien |
+| `page` | number | 1 | Halaman |
+| `limit` | number | 20 | Item/halaman (max 100) |
+
+**Response 200:** `{ items: [...], pagination: {...} }` (item menyertakan `patient` dan `_count.readings`).
+
+---
+
+#### 4.6 Get Session Readings
+```
+GET /monitoring/session/:sessionId
+```
+Mengembalikan sesi + seluruh readings (ascending, max 1000).
+**Response 200:**
+```json
+{
+  "success": true,
+  "data": {
+    "session": { "id": 1, "patientId": 1, "deviceId": "ESP32-ALPHA-001", "status": "COMPLETED", "startTime": "...", "endTime": "...", "notes": null },
+    "readings": [ { "id": 1, "bpm": 85, "spo2": 98, "status": "NORMAL", "createdAt": "..." } ],
+    "totalReadings": 60
+  },
+  "message": "Session readings retrieved"
+}
+```
+
+---
+
+#### 4.7 Get Patient Readings
+```
+GET /monitoring/patient/:patientId
+```
+`patientId` dapat berupa ID internal (angka) atau `P-XXX`.
+**Query:** `limit` (default 50, max 200).
+**Response 200:** `{ readings: [...], pagination: {...} }`
+
+---
+
+#### 4.8 Get Monitoring History
+```
+GET /monitoring/history?page=1&limit=20&startDate=2026-07-01&endDate=2026-07-07&status=NORMAL&patientId=1
+```
+
+| Parameter | Tipe | Default | Deskripsi |
+|-----------|------|---------|-----------|
+| `page` | number | 1 | Halaman |
+| `limit` | number | 20 | Item/halaman (max 200) |
+| `startDate` | string | - | Awal rentang tanggal |
+| `endDate` | string | - | Akhir rentang tanggal |
+| `status` | string | - | `NORMAL`, `WASPADA`, `DARURAT` |
+| `patientId` | number/string | - | ID internal atau `P-XXX` |
+| `bpmStatus` | string | - | `BRADICARDIA`, `NORMAL`, `TACHY_RINGAN`, `TACHY_BERAT` |
+| `spo2Status` | string | - | `NORMAL`, `HIPOKSEMIA_RINGAN`, `HIPOKSEMIA_SEDANG`, `HIPOKSEMIA_BERAT` |
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "data": {
+    "readings": [
       {
         "id": 1,
         "patientId": 1,
@@ -691,77 +540,44 @@ GET /monitoring/history?page=1&limit=20&startDate=2026-07-01&endDate=2026-07-07&
         "spo2Status": "NORMAL",
         "status": "NORMAL",
         "sessionId": 1,
-        "createdAt": "2026-07-07T09:30:00.000Z",
-        "patient": {
-          "id": 1,
-          "patientId": "P-001",
-          "name": "Budi Santoso",
-          "gender": "L",
-          "age": 45
-        },
-        "session": {
-          "id": 1,
-          "status": "ACTIVE",
-          "startTime": "2026-07-07T09:30:00.000Z"
-        }
+        "createdAt": "...",
+        "patient": { "id": 1, "patientId": "P-001", "name": "Budi Santoso", "gender": "L", "age": 45 },
+        "session": { "id": 1, "status": "COMPLETED", "startTime": "..." }
       }
     ],
-    "pagination": {
-      "page": 1,
-      "limit": 20,
-      "total": 50,
-      "totalPages": 3
-    }
+    "pagination": { "page": 1, "limit": 20, "total": 50, "totalPages": 3 }
   },
   "message": "History retrieved"
 }
 ```
 
+> ⚠ Field data bernama `readings` (bukan `items`) pada endpoint history.
+
 ---
 
 ### 5. Reports
 
-Semua endpoint Reports memerlukan autentikasi.
+Semua endpoint memerlukan autentikasi.
 
 #### 5.1 Get Daily Report
-
 ```
 GET /reports/daily?startDate=2026-07-01&endDate=2026-07-07
 ```
 
-**Query Parameters:**
-
-| Parameter   | Tipe   | Wajib | Default                       | Deskripsi                |
-|------------|--------|-------|-------------------------------|--------------------------|
-| `startDate` | string | Tidak | 30 hari yang lalu             | Tanggal awal (ISO 8601)  |
-| `endDate`   | string | Tidak | Hari ini                      | Tanggal akhir (ISO 8601) |
+| Parameter | Tipe | Default | Deskripsi |
+|-----------|------|---------|-----------|
+| `startDate` | string | 30 hari lalu | Tanggal awal |
+| `endDate` | string | Hari ini | Tanggal akhir |
 
 **Response 200:**
-
 ```json
 {
   "success": true,
   "data": {
-    "period": {
-      "start": "2026-07-01T00:00:00.000Z",
-      "end": "2026-07-07T23:59:59.000Z"
-    },
-    "summary": {
-      "totalReadings": 500,
-      "normalCount": 350,
-      "waspadaCount": 100,
-      "daruratCount": 50
-    },
+    "period": { "start": "...", "end": "..." },
+    "summary": { "totalReadings": 500, "normalCount": 350, "waspadaCount": 100, "daruratCount": 50 },
     "daily": [
-      {
-        "date": "2026-07-01",
-        "totalReadings": 80,
-        "normalCount": 60,
-        "waspadaCount": 15,
-        "daruratCount": 5,
-        "avgBpm": 78,
-        "avgSpo2": 97
-      }
+      { "date": "2026-07-01", "totalReadings": 80, "normalCount": 60, "waspadaCount": 15, "daruratCount": 5, "avgBpm": 78, "avgSpo2": 97 }
     ]
   },
   "message": "Daily report generated"
@@ -771,40 +587,23 @@ GET /reports/daily?startDate=2026-07-01&endDate=2026-07-07
 ---
 
 #### 5.2 Get Monthly Report
-
 ```
 GET /reports/monthly?year=2026
 ```
 
-**Query Parameters:**
-
-| Parameter | Tipe   | Wajib | Default | Deskripsi          |
-|-----------|--------|-------|---------|--------------------|
-| `year`    | number | Tidak | 2026    | Tahun (2000–2100)  |
+| Parameter | Tipe | Default | Deskripsi |
+|-----------|------|---------|-----------|
+| `year` | number | Tahun sekarang | Tahun (2000–2100) |
 
 **Response 200:**
-
 ```json
 {
   "success": true,
   "data": {
     "year": 2026,
-    "summary": {
-      "totalReadings": 500,
-      "totalPatients": 5
-    },
+    "summary": { "totalReadings": 500, "totalPatients": 5 },
     "monthly": [
-      {
-        "month": 7,
-        "year": 2026,
-        "totalReadings": 500,
-        "uniquePatients": 5,
-        "normalCount": 350,
-        "waspadaCount": 100,
-        "daruratCount": 50,
-        "avgBpm": 85,
-        "avgSpo2": 96
-      }
+      { "month": 7, "year": 2026, "totalReadings": 500, "uniquePatients": 5, "normalCount": 350, "waspadaCount": 100, "daruratCount": 50, "avgBpm": 85, "avgSpo2": 96 }
     ]
   },
   "message": "Monthly report generated"
@@ -813,170 +612,103 @@ GET /reports/monthly?year=2026
 
 ---
 
-#### 5.3 Export PDF
-
+#### 5.3 Export PDF (Harian/Bulanan)
 ```
 GET /reports/export/pdf?type=daily&startDate=2026-07-01&endDate=2026-07-07
 ```
 
-**Query Parameters:**
+| Parameter | Tipe | Default | Deskripsi |
+|-----------|------|---------|-----------|
+| `type` | string | `daily` | `daily` atau `monthly` |
+| `startDate` | string | 30 hari lalu | Tanggal awal |
+| `endDate` | string | Hari ini | Tanggal akhir |
 
-| Parameter   | Tipe   | Wajib | Default       | Deskripsi                      |
-|------------|--------|-------|---------------|--------------------------------|
-| `type`      | string | Tidak | `daily`       | Tipe laporan (`daily`/`monthly`) |
-| `startDate` | string | Tidak | 30 hari lalu  | Tanggal awal                   |
-| `endDate`   | string | Tidak | Hari ini      | Tanggal akhir                  |
-
-**Response:** `application/pdf` (file download)
-
-PDF berisi:
-- Judul laporan
-- Periode laporan
-- Ringkasan statistik (total readings, distribusi status)
-- Tabel detail pembacaan (waktu, pasien, BPM, SpO₂, status)
+**Response:** `application/pdf` (file download) berisi judul, periode, ringkasan, dan tabel detail reading.
 
 ---
 
 #### 5.4 Export Excel
-
 ```
 GET /reports/export/excel?startDate=2026-07-01&endDate=2026-07-07
 ```
+**Response:** `.xlsx` dengan 2 sheet: **Summary** dan **Readings**.
 
-**Query Parameters:**
+---
 
-| Parameter   | Tipe   | Wajib | Default       | Deskripsi     |
-|------------|--------|-------|---------------|---------------|
-| `startDate` | string | Tidak | 30 hari lalu  | Tanggal awal  |
-| `endDate`   | string | Tidak | Hari ini      | Tanggal akhir |
+#### 5.5 Export Session PDF
+```
+GET /reports/export/session-pdf?sessionId=1
+```
 
-**Response:** `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (file download .xlsx)
+| Parameter | Tipe | Wajib | Deskripsi |
+|-----------|------|-------|-----------|
+| `sessionId` | number | Ya | ID sesi monitoring |
 
-Excel berisi 2 sheet:
-1. **Summary** — Ringkasan statistik (periode, total readings, distribusi status)
-2. **Readings** — Tabel detail pembacaan (date/time, patient ID, name, gender, age, BPM, SpO₂, status)
+**Response:** `application/pdf` — **Laporan Hasil Monitoring** bergaya rumah sakit yang berisi:
+- Header dokumen (judul "LAPORAN HASIL MONITORING")
+- Tabel Data Pasien & Sesi: Nama, ID, Waktu Mulai/Selesai, Device (label dari `Esp32Device`), Total Data
+- Tabel Hasil Pemeriksaan: Parameter | Rata-rata | Nilai Normal | Keterangan
+- Kotak Status Penyakit (Dugaan): berdasarkan rata-rata BPM & SpO₂
+- Footer keterangan generate otomatis
 
 ---
 
 ### 6. Settings
 
-Semua endpoint Settings memerlukan autentikasi.
+Semua endpoint memerlukan autentikasi.
 
 #### 6.1 Get Settings
-
 ```
 GET /settings
 ```
-
 **Response 200:**
-
 ```json
 {
   "success": true,
   "data": {
     "items": [
-      {
-        "id": 1,
-        "key": "min_bpm",
-        "value": "60",
-        "description": "Batas bawah BPM normal",
-        "updatedAt": "2026-07-07T00:00:00.000Z"
-      },
-      {
-        "id": 2,
-        "key": "max_bpm",
-        "value": "100",
-        "description": "Batas atas BPM normal",
-        "updatedAt": "2026-07-07T00:00:00.000Z"
-      },
-      {
-        "id": 3,
-        "key": "min_spo2",
-        "value": "95",
-        "description": "Batas bawah SpO₂ normal",
-        "updatedAt": "2026-07-07T00:00:00.000Z"
-      },
-      {
-        "id": 4,
-        "key": "max_spo2",
-        "value": "100",
-        "description": "Batas atas SpO₂ normal",
-        "updatedAt": "2026-07-07T00:00:00.000Z"
-      }
+      { "id": 1, "key": "min_bpm", "value": "60", "description": "Batas bawah BPM normal", "updatedAt": "..." }
     ],
-    "map": {
-      "min_bpm": "60",
-      "max_bpm": "100",
-      "min_spo2": "95",
-      "max_spo2": "100"
-    }
+    "map": { "min_bpm": "60", "max_bpm": "100", "min_spo2": "95", "max_spo2": "100" }
   },
   "message": "Settings retrieved"
 }
 ```
 
-**Daftar Setting Keys yang Valid:**
-
-| Key                    | Default | Deskripsi                               |
-|------------------------|---------|-----------------------------------------|
-| `min_bpm`              | 60      | Batas bawah BPM normal                  |
-| `max_bpm`              | 100     | Batas atas BPM normal                   |
-| `min_spo2`             | 95      | Batas bawah SpO₂ normal                 |
-| `max_spo2`             | 100     | Batas atas SpO₂ normal                  |
-| `alert_bpm_high`       | -       | Ambang peringatan BPM tinggi            |
-| `alert_bpm_low`        | -       | Ambang peringatan BPM rendah            |
-| `alert_spo2_low`       | -       | Ambang peringatan SpO₂ rendah           |
-| `monitoring_interval`  | -       | Interval pengiriman data (detik)        |
-| `auto_session_timeout` | -       | Timeout sesi otomatis (menit)           |
-| `custom_*`             | -       | Setting kustom (diawali `custom_`)      |
+**Valid keys:**
+| Key | Default | Deskripsi |
+|-----|---------|-----------|
+| `min_bpm` | 60 | Batas bawah BPM |
+| `max_bpm` | 100 | Batas atas BPM |
+| `min_spo2` | 95 | Batas bawah SpO₂ |
+| `max_spo2` | 100 | Batas atas SpO₂ |
+| `alert_bpm_high` | - | Ambang alert BPM tinggi |
+| `alert_bpm_low` | - | Ambang alert BPM rendah |
+| `alert_spo2_low` | - | Ambang alert SpO₂ rendah |
+| `monitoring_interval` | - | Interval kirim data (detik) |
+| `auto_session_timeout` | - | Timeout sesi (menit) |
+| `custom_*` | - | Setting kustom |
 
 ---
 
 #### 6.2 Update Settings
-
 ```
 PUT /settings
 ```
-
-**Request Body:**
-
-```json
-{
-  "min_bpm": "60",
-  "max_bpm": "100",
-  "min_spo2": "95",
-  "max_spo2": "100",
-  "alert_bpm_high": "120",
-  "alert_bpm_low": "50",
-  "alert_spo2_low": "90",
-  "monitoring_interval": "5",
-  "auto_session_timeout": "30"
-}
-```
+**Request Body:** objek `{ key: "value", ... }`.
 
 **Validasi:**
-
-- Semua nilai numerik harus berupa string angka positif
-- `min_bpm`: 30–200
-- `max_bpm`: 30–250
-- `min_spo2` / `max_spo2`: 50–100
-- `min_bpm` harus kurang dari `max_bpm`
-- `min_spo2` harus kurang dari `max_spo2`
+- Nilai harus string; angka harus bilangan positif.
+- `min_bpm`: 30–200, `max_bpm`: 30–250, spo2: 50–100.
+- `min_*` harus kurang dari `max_*`.
 
 **Response 200:**
-
 ```json
 {
   "success": true,
   "data": {
     "updated": 3,
-    "changes": [
-      {
-        "key": "min_bpm",
-        "oldValue": "50",
-        "newValue": "60"
-      }
-    ]
+    "changes": [ { "key": "min_bpm", "oldValue": "50", "newValue": "60" } ]
   },
   "message": "3 setting(s) updated successfully"
 }
@@ -984,189 +716,187 @@ PUT /settings
 
 ---
 
-### 7. Health Check
-
+#### 6.3 Update Profile
 ```
-GET /health
+PUT /settings/profile
 ```
+**Request Body:**
+```json
+{ "name": "Admin Baru", "email": "admin@example.com" }
+```
+**Response 200:** `{ id, adminName, adminEmail }`
 
-**Autentikasi:** Tidak diperlukan
+---
+
+#### 6.4 Update Thresholds
+```
+PUT /settings/thresholds
+```
+**Request Body:**
+```json
+{ "minBpm": 60, "maxBpm": 100, "minSpo2": 95, "maxSpo2": 100 }
+```
+**Response 200:** `{ id, adminName, adminEmail, minBpm, maxBpm, minSpo2, maxSpo2 }`
+
+---
+
+#### 6.5 Change Password
+```
+PUT /settings/password
+```
+**Request Body:**
+```json
+{ "currentPassword": "Admin123!", "newPassword": "Baru123!", "confirmPassword": "Baru123!" }
+```
+**Response 200:** `{ success, data: null, message: "Password changed successfully" }`
+
+---
+
+#### 6.6 Clear Monitoring Data
+```
+DELETE /settings/data
+```
+Menghapus semua `Reading`, `MonitoringSession`, `AuditLog` — tanpa menghapus `Esp32Device` dan `Admin`.
 
 **Response 200:**
-
 ```json
 {
   "success": true,
   "data": {
-    "status": "healthy",
-    "timestamp": "2026-07-07T10:30:00.000Z",
-    "uptime": 12345.67
+    "deletedReadings": 60,
+    "deletedSessions": 6,
+    "deletedAuditLogs": 12,
+    "keptDevices": 3,
+    "keptAdmins": 1
   },
-  "message": "Server is running"
+  "message": "Berhasil menghapus 60 data monitoring, 6 sesi, 12 log. Device & Admin tetap aman."
 }
 ```
 
 ---
 
-## Socket.IO Events
+### 7. Devices
 
-### Koneksi
+Semua endpoint memerlukan autentikasi.
 
-```javascript
-// Frontend — Koneksi dengan token JWT
-const socket = io('http://localhost:5000', {
-  auth: { token: 'Bearer <jwt-token>' }
-});
-
-// Frontend — Koneksi tanpa autentikasi
-const socket = io('http://localhost:5000');
-
-// ESP32 — Koneksi dengan deviceId dan apiKey
-const socket = io('http://{server-ip}:5000', {
-  auth: { deviceId: 'ESP32-ALPHA-001', apiKey: 'a1b2c3d4...' }
-});
+#### 7.1 List Devices
 ```
+GET /devices?page=1&limit=10&search=
+```
+**Response 200:** `{ items: [...], pagination: {...} }`
+Item berisi `id, deviceId, label, isActive, createdAt, updatedAt` (tanpa `apiKey`).
 
-### Events: ESP32 → Server
+#### 7.2 Get Device
+```
+GET /devices/:id
+```
+**Response 200:** detail device.
 
-#### `esp32:reading`
-
-Dikirim oleh perangkat ESP32 untuk mengirim data vital sign.
-
-**Payload:**
-
+#### 7.3 Create Device
+```
+POST /devices
+```
+**Request Body:**
+```json
+{ "deviceId": "ESP32-DELTA-004", "label": "Ruang ICU", "isActive": true }
+```
+**Response 201:** berisi `rawApiKey` **hanya sekali**:
 ```json
 {
-  "deviceId": "ESP32-ALPHA-001",
-  "apiKey": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1",
-  "patientId": 1,
-  "bpm": 85,
-  "spo2": 98,
-  "sessionId": 1
-}
-```
-
-| Field       | Tipe   | Wajib | Deskripsi                           |
-|-------------|--------|-------|-------------------------------------|
-| `deviceId`  | string | Ya    | ID unik perangkat ESP32             |
-| `apiKey`    | string | Ya    | API key perangkat (SHA-256 hash)    |
-| `patientId` | number | Ya    | ID pasien yang dipantau             |
-| `bpm`       | number | Ya    | Denyut jantung (30–250)             |
-| `spo2`      | number | Ya    | Saturasi oksigen (50–100)            |
-| `sessionId` | number | Tidak | ID sesi (auto-created jika kosong)  |
-
-**Response (Acknowledgment):**
-
-```json
-{
-  "readingId": 51,
-  "status": "NORMAL"
-}
-```
-
-**Error Response:**
-
-```json
-{
-  "message": "Missing required fields: deviceId, apiKey, patientId, bpm, spo2"
-}
-```
-
-### Events: Server → Client
-
-#### `monitoring:update`
-
-Dikirim ke semua admin client ketika ada pembacaan baru.
-
-**Payload:**
-
-```json
-{
-  "type": "new_reading",
-  "reading": {
-    "id": 51,
-    "patientId": 1,
-    "sessionId": 1,
-    "bpm": 85,
-    "spo2": 98,
-    "bpmStatus": "NORMAL",
-    "spo2Status": "NORMAL",
-    "status": "NORMAL",
-    "createdAt": "2026-07-07T10:30:00.000Z",
-    "patient": {
-      "id": 1,
-      "patientId": "P-001",
-      "name": "Budi Santoso"
-    }
-  }
-}
-```
-
-#### `monitoring:alert`
-
-Dikirim ke semua admin client ketika ada pembacaan yang melampaui ambang batas.
-
-**Payload:**
-
-```json
-{
-  "patientId": 3,
-  "patientName": "Ahmad Hidayat",
-  "reading": {
-    "bpm": 130,
-    "spo2": 85,
-    "bpmStatus": "TACHY_BERAT",
-    "spo2Status": "HIPOKSEMIA_SEDANG",
-    "status": "DARURAT"
+  "success": true,
+  "data": {
+    "id": 4,
+    "deviceId": "ESP32-DELTA-004",
+    "label": "Ruang ICU",
+    "isActive": true,
+    "createdAt": "...",
+    "updatedAt": "...",
+    "rawApiKey": "bpm-a1b2c3...",
+    "warning": "API Key ini hanya ditampilkan sekali. Simpan dengan aman!"
   },
-  "message": "BPM 130 di atas batas normal (100)",
-  "timestamp": "2026-07-07T10:30:00.000Z"
+  "message": "Device berhasil didaftarkan. Salin API Key sekarang!"
+}
+```
+**Error:** `CONFLICT` (409) jika `deviceId` sudah terdaftar.
+
+> API key dihasilkan acak (format `bpm-` + 64 hex), disimpan sebagai hash SHA-256.
+
+#### 7.4 Update Device
+```
+PUT /devices/:id
+```
+Partial update (`deviceId`, `label`, `isActive`). API key **tidak** dapat diubah.
+
+#### 7.5 Toggle Device
+```
+PATCH /devices/:id/toggle
+```
+Membalik `isActive`.
+
+#### 7.6 Delete Device
+```
+DELETE /devices/:id
+```
+
+---
+
+### 8. Readings (Ingestion Device)
+
+#### 8.1 Create Reading (dari Device)
+```
+POST /readings/device
+```
+**Autentikasi:** Khusus — header device (BUKAN JWT).
+
+**Headers:**
+| Header | Deskripsi |
+|--------|-----------|
+| `x-device-id` | ID unik device (harus terdaftar & aktif) |
+| `x-api-key` | API key plaintext device (min 16 karakter) |
+
+**Request Body:**
+```json
+{ "bpm": 75, "spo2": 98 }
+```
+
+| Field | Tipe | Wajib | Validasi |
+|-------|------|-------|----------|
+| `bpm` | number | Ya | Integer 30–250 |
+| `spo2` | number | Ya | Integer 50–100 |
+
+**Response 201:**
+```json
+{
+  "success": true,
+  "data": { "readingId": 51, "status": "NORMAL" },
+  "message": "Data tersimpan"
 }
 ```
 
-#### `monitoring:status`
+**Error (auth):**
+| HTTP | Code | Kondisi |
+|------|------|---------|
+| 401 | `MISSING_DEVICE_ID` | Header `x-device-id` tidak ada |
+| 401 | `MISSING_API_KEY` | Header `x-api-key` tidak ada |
+| 401 | `INVALID_API_KEY` | API key terlalu pendek |
+| 401 | `AUTH_FAILED` | device tidak cocok (tidak terdaftar / nonaktif / key salah) |
 
-Dapat digunakan untuk mengirim status koneksi atau informasi lain.
+**Alur backend:** autentikasi device → validasi body → cari sesi ACTIVE device → hitung status → simpan reading → broadcast `monitoring:update` (+ `monitoring:alert` jika abnormal).
 
-### Events: Client → Server (Subscription)
+---
 
-#### `subscribe:patient`
-
-Berlangganan (subscribe) ke pembaruan pasien tertentu.
-
-**Payload:**
-
-```json
-{
-  "patientId": 1
-}
+### 9. Health Check
 ```
-
-**Response:**
-
-```json
-{
-  "patientId": 1
-}
+GET /api/health
 ```
+**Autentikasi:** Tidak diperlukan
 
-#### `unsubscribe:patient`
-
-Berhenti berlangganan dari pasien tertentu.
-
-**Payload:**
-
+**Response 200:**
 ```json
 {
-  "patientId": 1
-}
-```
-
-**Response:**
-
-```json
-{
-  "patientId": 1
+  "success": true,
+  "data": { "status": "healthy", "timestamp": "...", "uptime": 12345.67 },
+  "message": "Server is running"
 }
 ```
 
@@ -1175,54 +905,48 @@ Berhenti berlangganan dari pasien tertentu.
 ## Status Thresholds
 
 ### BPM Status
-
-| Rentang      | Status          | Keterangan              |
-|-------------|-----------------|-------------------------|
-| < 60        | `BRADICARDIA`   | Denyut lambat           |
-| 60 – 100    | `NORMAL`        | Normal                  |
-| 101 – 120   | `TACHY_RINGAN`  | Takikardia ringan       |
-| > 120       | `TACHY_BERAT`   | Takikardia berat        |
+| Rentang | bpmStatus |
+|---------|-----------|
+| < 60 | `BRADICARDIA` |
+| 60 – 100 | `NORMAL` |
+| 101 – 120 | `TACHY_RINGAN` |
+| > 120 | `TACHY_BERAT` |
 
 ### SpO₂ Status
-
-| Rentang    | Status               | Keterangan              |
-|------------|----------------------|-------------------------|
-| ≥ 95       | `NORMAL`             | Normal                  |
-| 90 – 94    | `HIPOKSEMIA_RINGAN`  | Hipoksemia ringan       |
-| 85 – 89    | `HIPOKSEMIA_SEDANG`  | Hipoksemia sedang       |
-| < 85       | `HIPOKSEMIA_BERAT`   | Hipoksemia berat        |
+| Rentang | spo2Status |
+|---------|------------|
+| ≥ 95 | `NORMAL` |
+| 90 – 94 | `HIPOKSEMIA_RINGAN` |
+| 85 – 89 | `HIPOKSEMIA_SEDANG` |
+| < 85 | `HIPOKSEMIA_BERAT` |
 
 ### Composite Status
-
-| Kondisi                                                      | Status    |
-|--------------------------------------------------------------|-----------|
-| BPM Normal DAN SpO₂ Normal                                   | `NORMAL`  |
-| Bradikardia ATAU Takikardia Berat ATAU Hipoksemia Sedang/Berat | `DARURAT` |
-| Selain kondisi di atas                                       | `WASPADA` |
+| Kondisi | status |
+|---------|--------|
+| BPM & SpO₂ normal | `NORMAL` |
+| `BRADICARDIA` / `TACHY_BERAT` / `HIPOKSEMIA_SEDANG` / `HIPOKSEMIA_BERAT` | `DARURAT` |
+| Lainnya | `WASPADA` |
 
 ---
 
 ## Rate Limiting
 
-| Endpoint              | Window  | Max Requests | Header Response                  |
-|-----------------------|---------|--------------|----------------------------------|
-| Global (`/api/`)      | 15 menit | 200         | `RateLimit-*`                    |
-| Auth (`/auth/login`)  | 15 menit | 20          | `RateLimit-*`                    |
+| Endpoint | Window | Max | Keterangan |
+|----------|--------|-----|------------|
+| Global `/api/` | 15 menit | 200 (default) | Diterapkan di `server/index.ts` |
+| Auth `/api/v1/auth/login` | 15 menit | 10 (default) | Proteksi brute-force |
+| (Config) `/api/v1/readings` | 1 menit | 60 | Tersedia di `config/security.ts` (`esp32RateLimit`) |
 
-Header respons menyertakan informasi rate limit:
-
-```
-RateLimit-Limit: 200
-RateLimit-Remaining: 195
-RateLimit-Reset: 1625640000
-```
+Header respons: `RateLimit-*` (standard headers).
 
 ---
 
 ## Catatan Penting
 
-1. **Format Tanggal:** Semua tanggal menggunakan format ISO 8601.
-2. **Pagination:** Selalu gunakan pagination untuk endpoint yang mengembalikan banyak data.
-3. **Token Blacklist:** Token yang di-logout tidak dapat digunakan kembali.
-4. **ESP32 Auth:** Perangkat ESP32 diautentikasi menggunakan API key yang dicocokkan dengan hash SHA-256 di database.
-5. **Audit Trail:** Semua operasi CRUD pada pasien dan pengaturan dicatat dalam tabel audit log.
+1. **Format tanggal** menggunakan ISO 8601.
+2. **Pagination** — gunakan untuk endpoint dengan banyak data.
+3. **Token blacklist** — token yang di-logout tidak dapat digunakan lagi (in-memory; gunakan Redis untuk multi-instance).
+4. **Autentikasi device** — via header `x-api-key` + `x-device-id` (SHA-256 di DB), bukan JWT.
+5. **Audit trail** — operasi CRUD pada pasien, device, settings tercatat di `AuditLog`.
+6. **Field response history** — endpoint `GET /monitoring/history` mengembalikan `readings` (bukan `items`).
+7. **Session PDF** — device ditampilkan sebagai label dari tabel `Esp32Device` (fallback ke `deviceId`).

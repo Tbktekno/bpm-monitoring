@@ -1,6 +1,6 @@
 # Panduan Setup — BPM & SpO₂ Monitoring Dashboard
 
-Panduan langkah demi langkah untuk menginstal, mengkonfigurasi, dan menjalankan aplikasi BPM & SpO₂ Monitoring Dashboard di lingkungan development.
+Panduan langkah demi langkah untuk menginstal, mengonfigurasi, dan menjalankan aplikasi di lingkungan **development**.
 
 ---
 
@@ -11,49 +11,28 @@ Panduan langkah demi langkah untuk menginstal, mengkonfigurasi, dan menjalankan 
 - [Setup Backend](#setup-backend)
 - [Setup Frontend](#setup-frontend)
 - [Akses Aplikasi](#akses-aplikasi)
-- [ESP32 Device Configuration](#esp32-device-configuration)
+- [Menjalankan Semua Sekaligus](#menjalankan-semua-sekaligus)
+- [Koneksi Perangkat IoT](#koneksi-perangkat-iot)
 - [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Prasyarat
 
-### 1. Install Node.js
-
-Unduh dan instal **Node.js versi 22 atau lebih baru** dari [nodejs.org](https://nodejs.org/).
-
-Verifikasi instalasi:
-
-```bash
-node --version
-# Output: v22.x.x
-
-npm --version
-# Output: 10.x.x
-```
-
-### 2. Install pnpm (Package Manager)
-
-pnpm direkomendasikan sebagai package manager karena lebih cepat dan efisien.
-
-```bash
-npm install -g pnpm
-
-pnpm --version
-# Output: 9.x.x
-```
-
-> **Catatan:** npm juga dapat digunakan sebagai alternatif.
-
-### 3. Install Git
-
-Unduh dan instal Git dari [git-scm.com](https://git-scm.com/).
+| Software | Versi Minimum | Catatan |
+|----------|---------------|---------|
+| Node.js | 22+ | https://nodejs.org |
+| npm | 10+ | Ikut terpasang dengan Node.js |
+| Git | 2.x | https://git-scm.com |
+| Browser | modern | Chrome/Edge/Firefox |
+| (Opsional) Arduino IDE | 2.x | Untuk flash firmware ESP8266 |
 
 Verifikasi instalasi:
 
 ```bash
-git --version
-# Output: git version 2.x.x
+node --version   # v22.x.x
+npm --version    # 10.x.x
+git --version    # git version 2.x.x
 ```
 
 ---
@@ -61,20 +40,19 @@ git --version
 ## Clone Repository
 
 ```bash
-# Clone repository
-git clone <repository-url>
-
-# Masuk ke direktori proyek
-cd Health
+git clone https://github.com/Tbktekno/bpm-monitoring.git
+cd bpm-monitoring
 ```
 
-Struktur direktori:
+Struktur direktori utama:
 
 ```
-Health/
-├── backend/     # Backend (Express + TypeScript + Prisma)
-├── frontend/    # Frontend (React + Vite + TypeScript)
-└── docs/        # Dokumentasi
+bpm-monitoring/
+├── backend/       # Backend (Express + TypeScript + Prisma)
+├── frontend/      # Frontend (React + Vite + TypeScript)
+├── firmware/      # Firmware ESP8266 + MAX30100
+├── docs/          # Dokumentasi
+└── docker-compose.yml
 ```
 
 ---
@@ -85,38 +63,24 @@ Health/
 
 ```bash
 cd backend
-
-# Menggunakan npm
 npm install
-
-# Atau menggunakan pnpm
-pnpm install
 ```
 
 ### 2. Konfigurasi Environment Variables
 
-File `.env` sudah tersedia di `backend/.env` untuk development. Jika perlu disesuaikan:
+File `.env` sudah tersedia di `backend/.env` untuk development. Jika perlu dibuat dari awal:
 
 ```bash
-# Buka file .env
-notepad .env
-# atau
-nano .env
-```
-
-File `.env` default:
-
-```env
-# Database
-DATABASE_URL="file:./dev.db"
-
-# Server
+# Contoh backend/.env
+DATABASE_URL="file:./dev.db"      # SQLite untuk development
 PORT=5000
 NODE_ENV=development
 
-# JWT — MUST be >= 64 characters in production; this dev key is for local use only
+# JWT — minimal 64 karakter
 JWT_SECRET=bpm-monitoring-dev-jwt-secret-key-that-is-at-least-sixty-four-characters-long-for-hs256
 JWT_ISSUER=bpm-monitoring
+JWT_EXPIRES_IN=24h
+JWT_REMEMBER_EXPIRES_IN=7d
 
 # gRPC
 GRPC_HOST=localhost
@@ -124,22 +88,19 @@ GRPC_PORT=50051
 
 # CORS
 CORS_ORIGIN=http://localhost:5173
+
+# Rate limiting (opsional)
+RATE_LIMIT_GLOBAL_MAX=200
+RATE_LIMIT_AUTH_MAX=10
+RATE_LIMIT_ESP32_MAX=60
 ```
 
-> **PENTING:** Untuk production, ganti `JWT_SECRET` dengan string acak minimal 64 karakter.
+> **PENTING:** Di production, `JWT_SECRET` harus string acak minimal 64 karakter (misal `openssl rand -hex 32`).
 
 ### 3. Generate Prisma Client
 
 ```bash
 npx prisma generate
-```
-
-Perintah ini akan menghasilkan Prisma Client berdasarkan schema di `prisma/schema.prisma`.
-
-Output yang diharapkan:
-
-```
-Prisma Client generated in XXXms
 ```
 
 ### 4. Push Schema ke Database
@@ -148,13 +109,7 @@ Prisma Client generated in XXXms
 npx prisma db push
 ```
 
-Perintah ini akan membuat tabel-tabel database sesuai dengan definisi schema.
-
-Output yang diharapkan:
-
-```
-Your database is now in sync with your Prisma schema.
-```
+> Untuk production (PostgreSQL), ubah `DATABASE_URL` di `.env` menjadi connection string PostgreSQL, lalu jalankan perintah yang sama.
 
 ### 5. Seed Database dengan Data Contoh
 
@@ -162,26 +117,26 @@ Your database is now in sync with your Prisma schema.
 npm run db:seed
 ```
 
-Perintah ini akan mengisi database dengan:
+Hasil seed (data contoh):
 
-| Data                   | Jumlah |
-|------------------------|--------|
-| Admin user             | 1      |
-| Pasien                 | 5      |
-| Sesi monitoring        | 5      |
-| Pembacaan vital sign   | 50     |
-| Pengaturan (settings)  | 4      |
-| Perangkat ESP32        | 3      |
+| Data | Jumlah |
+|------|--------|
+| Admin user | 1 |
+| Settings | 4 |
+| Pasien | 6 |
+| Sesi monitoring | 6 |
+| Pembacaan vital sign | 60 (10 per sesi) |
+| Perangkat ESP32 | 3 |
 
-Output yang diharapkan:
+Contoh output:
 
 ```
 🌱 Seeding database …
 
   ✓ Admin created: admin@monitoring-bpm.web.id
   ✓ 4 settings created
-  ✓ 5 patients created
-  ✓ 50 readings across 5 sessions
+  ✓ 6 patients created
+  ✓ 60 readings across 6 sessions
   ✓ 3 ESP32 devices created
 
 ✅ Seeding complete!
@@ -189,13 +144,11 @@ Output yang diharapkan:
 
 ### 6. Buka Prisma Studio (Opsional)
 
-Untuk melihat dan mengelola data database melalui GUI:
-
 ```bash
 npx prisma studio
 ```
 
-Prisma Studio akan terbuka di `http://localhost:5555`.
+Prisma Studio terbuka di `http://localhost:5555`.
 
 ### 7. Jalankan Development Server
 
@@ -203,9 +156,7 @@ Prisma Studio akan terbuka di `http://localhost:5555`.
 npm run dev
 ```
 
-Server akan berjalan di `http://localhost:5000`.
-
-Output yang diharapkan:
+Server berjalan di `http://localhost:5000`:
 
 ```
 ========================================
@@ -216,7 +167,26 @@ Output yang diharapkan:
 ========================================
 ```
 
-Server akan secara otomatis restart ketika ada perubahan kode (menggunakan `ts-node-dev`).
+Server otomatis restart saat ada perubahan kode (ts-node-dev).
+
+### 8. Verifikasi Backend
+
+```bash
+# Health check
+curl http://localhost:5000/api/health
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "healthy",
+    "timestamp": "2026-08-06T...",
+    "uptime": 12.34
+  },
+  "message": "Server is running"
+}
+```
 
 ---
 
@@ -228,24 +198,19 @@ Buka terminal baru (biarkan backend tetap berjalan):
 
 ```bash
 cd frontend
-
-# Menggunakan npm
 npm install
-
-# Atau menggunakan pnpm
-pnpm install
 ```
 
 ### 2. Konfigurasi Environment Variables
 
-File `.env` sudah tersedia di `frontend/.env`:
+File `.env` tersedia di `frontend/.env`:
 
 ```env
 VITE_API_BASE_URL=http://localhost:5000/api/v1
 VITE_SOCKET_URL=http://localhost:5000
 ```
 
-Jika backend berjalan di host atau port yang berbeda, sesuaikan nilai-nilai di atas.
+Sesuaikan jika backend berjalan di host/port berbeda. Untuk mode proxy (default), `VITE_API_BASE_URL` juga dapat diatur ke `/api/v1` karena Vite sudah dikonfigurasi proxy di `vite.config.ts`.
 
 ### 3. Jalankan Development Server
 
@@ -253,9 +218,7 @@ Jika backend berjalan di host atau port yang berbeda, sesuaikan nilai-nilai di a
 npm run dev
 ```
 
-Server akan berjalan di `http://localhost:5173`.
-
-Output yang diharapkan:
+Server berjalan di `http://localhost:5173`:
 
 ```
   VITE v8.x.x  ready in XXX ms
@@ -266,7 +229,7 @@ Output yang diharapkan:
 
 ### 4. Development Proxy
 
-Frontend Vite telah dikonfigurasi dengan proxy di `vite.config.ts`:
+`frontend/vite.config.ts` menyediakan proxy ke backend sehingga API bisa dipanggil dengan path relatif:
 
 ```typescript
 server: {
@@ -280,267 +243,153 @@ server: {
 },
 ```
 
-Dengan proxy ini, frontend dapat memanggil API menggunakan path relatif (`/api/v1/...`) tanpa menyebutkan domain backend secara langsung.
-
 ---
 
 ## Akses Aplikasi
 
-Buka browser dan akses:
+Buka browser ke **http://localhost:5173**
 
-**http://localhost:5173**
+### Kredensial Login Default
 
-### Halaman Login
+| Field | Nilai |
+|-------|-------|
+| Email | `admin@monitoring-bpm.web.id` |
+| Password | `Admin123!` |
 
-![Login Page](*screenshot-placeholder*)
-
-Masukkan kredensial default:
-
-| Field    | Value                          |
-|----------|--------------------------------|
-| Email    | `admin@monitoring-bpm.web.id`  |
-| Password | `Admin123!`                    |
-
-### Halaman Dashboard
-
-Setelah login, Anda akan melihat dashboard dengan:
-- **Statistik Ringkasan:** Total pasien, distribusi status (Normal/Waspada/Darurat)
-- **Rata-rata Vital Sign:** Rata-rata BPM dan SpO₂ 24 jam terakhir
-- **Grafik Perkembangan:** Grafik BPM dan SpO₂ per jam hari ini
-- **Pembacaan Terbaru:** 10 data vital sign terbaru
+> ⚠ Ganti password segera setelah masuk (menu Pengaturan → Ganti Password).
 
 ### Menu Navigasi
 
-| Menu          | Halaman                          |
-|---------------|----------------------------------|
-| Dashboard     | Ringkasan statistik dan grafik   |
-| Monitoring    | Data real-time semua pasien      |
-| Pasien        | Manajemen data pasien            |
-| Riwayat       | Histori pembacaan vital sign     |
-| Laporan       | Laporan harian/bulanan + ekspor  |
-| Pengaturan    | Konfigurasi threshold            |
+| Menu | Route | Fungsi |
+|------|-------|--------|
+| Dashboard | `/` | Statistik & grafik ringkasan |
+| Monitoring | `/monitoring` | Monitoring real-time + mulai/stop sesi |
+| Pasien | `/patients` | CRUD pasien |
+| Riwayat | `/history` | Histori pembacaan + filter |
+| Laporan | `/reports` | Laporan sesi/harian/bulanan + ekspor PDF/Excel |
+| Perangkat | `/devices` | Manajemen ESP32/ESP8266 |
+| Pengaturan | `/settings` | Threshold, profil, password |
 
 ---
 
-## ESP32 Device Configuration
+## Menjalankan Semua Sekaligus
 
-### Kredensial Perangkat (Seed Data)
+Dari root repository:
 
-Database telah di-seed dengan 3 perangkat ESP32:
+```bash
+# Install semua dependencies
+npm install
+npm run db:generate
+npm run db:push
+npm run db:seed
 
-| Device ID         | API Key                                           | Lokasi              | Status  |
-|-------------------|---------------------------------------------------|---------------------|---------|
-| ESP32-ALPHA-001   | `a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6...` (64 chars) | Ruang Observasi 1   | Aktif   |
-| ESP32-BETA-002    | `b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7...` (64 chars) | Ruang IGD           | Aktif   |
-| ESP32-GAMMA-003   | `c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8...` (64 chars) | Ruang Perawatan 2   | Nonaktif |
-
-### Koneksi Socket.IO dari ESP32
-
-```cpp
-// Contoh kode ESP32 (Arduino/C++)
-#include <WiFi.h>
-#include <SocketIoClient.h>
-
-SocketIoClient socket;
-
-void setup() {
-  WiFi.begin("SSID", "PASSWORD");
-
-  socket.on("connect", []() {
-    Serial.println("Terhubung ke server!");
-  });
-
-  socket.on("esp32:ack", [](const char* payload) {
-    Serial.printf("ACK: %s\n", payload);
-  });
-
-  socket.on("esp32:error", [](const char* payload) {
-    Serial.printf("Error: %s\n", payload);
-  });
-
-  // Koneksi ke server
-  socket.begin("192.168.1.100", 5000, "/?deviceId=ESP32-ALPHA-001&apiKey=a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1");
-}
-
-void loop() {
-  socket.loop();
-
-  // Kirim data setiap 5 detik
-  static unsigned long lastSend = 0;
-  if (millis() - lastSend > 5000) {
-    // Baca sensor MAX30100
-    int bpm = readBPM();
-    int spo2 = readSpO2();
-
-    // Kirim data ke server
-    socket.emit("esp32:reading",
-      "{\"deviceId\":\"ESP32-ALPHA-001\","
-      "\"apiKey\":\"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1\","
-      "\"patientId\":1,"
-      "\"bpm\":" + String(bpm) + ","
-      "\"spo2\":" + String(spo2) + "}"
-    );
-
-    lastSend = millis();
-  }
-}
-
-int readBPM() {
-  // Implementasi pembacaan sensor MAX30100
-  return random(60, 100); // Contoh nilai
-}
-
-int readSpO2() {
-  // Implementasi pembacaan sensor MAX30100
-  return random(95, 100); // Contoh nilai
-}
+# Jalankan backend + frontend sekaligus (concurrently)
+npm run dev
 ```
 
-### Menambahkan Perangkat Baru
+Atau gunakan skrip yang tersedia:
 
-Untuk menambahkan perangkat ESP32 baru, tambahkan record ke tabel `Esp32Device`:
+| Skrip | Fungsi |
+|-------|--------|
+| `run-dev.bat` | Menjalankan development (Windows batch) |
+| `run-dev.ps1` | Menjalankan development (PowerShell) |
+| `run-test.bat` | Menjalankan test (Windows) |
+| `run-test.sh` | Menjalankan test (Linux/macOS) |
 
-1. Generate API key (64 karakter hex).
-2. Hash API key menggunakan SHA-256.
-3. Simpan hash di database.
-4. Konfigurasi ESP32 dengan API key asli (plaintext).
+---
+
+## Koneksi Perangkat IoT
+
+Agar perangkat ESP8266 dapat mengirim data, perangkat harus terdaftar di database. Seed sudah menyediakan 3 perangkat:
+
+| Device ID | API Key (plaintext) | Label | Status |
+|-----------|---------------------|-------|--------|
+| `ESP32-ALPHA-001` | `bpm-sample-alpha-key-001` | Ruang Observasi 1 | Aktif |
+| `ESP32-BETA-002` | `bpm-sample-beta-key-002` | Ruang IGD | Aktif |
+| `ESP32-GAMMA-003` | `bpm-sample-gamma-key-003` | Ruang Perawatan 2 | Nonaktif |
+
+**Menambahkan perangkat baru:** gunakan menu **Perangkat → Tambah** di dashboard, atau `POST /api/v1/devices`. Sistem akan menghasilkan API key acak (`bpm-...`) dan menampilkannya **hanya sekali**.
+
+**Firmware ESP8266:** lihat [Dokumentasi Firmware](firmware.md).
 
 ---
 
 ## Troubleshooting
 
-### Masalah: Database Error
+### Error: `DATABASE_URL` tidak ditemukan
+Pastikan file `backend/.env` ada dan berisi `DATABASE_URL`. Jika tidak, salin dari `.env.example` atau buat manual.
 
-**Gejala:** Error saat menjalankan `npx prisma db push` atau `npm run db:seed`.
+### Error: `JWT_SECRET` kurang dari 64 karakter
+Ganti `JWT_SECRET` di `backend/.env` dengan string minimal 64 karakter.
 
-**Solusi:**
-
+### Error: Port sudah digunakan (`EADDRINUSE`)
 ```bash
-# Hapus database lama
-del backend\prisma\dev.db
-
-# Generate ulang Prisma Client
-cd backend
-npx prisma generate
-npx prisma db push
-npm run db:seed
-```
-
-### Masalah: Port Sudah Digunakan
-
-**Gejala:** Error `EADDRINUSE` saat menjalankan server.
-
-**Solusi:**
-
-```bash
-# Cari proses yang menggunakan port
-netstat -ano | findstr :5000
+netstat -ano | findstr :5000     # Windows
 netstat -ano | findstr :5173
-
-# Hentikan proses (ganti PID sesuai hasil)
 taskkill /PID <PID> /F
-
-# Atau gunakan port berbeda dengan mengubah .env
-PORT=5001
 ```
+Atau ubah `PORT` di `backend/.env`.
 
-### Masalah: Modul Tidak Ditemukan
-
-**Gejala:** Error `Cannot find module` saat menjalankan perintah.
-
-**Solusi:**
-
-```bash
-# Hapus node_modules dan install ulang
-rm -rf node_modules
-npm install
-
-# Untuk backend
-cd backend
-rm -rf node_modules
-npm install
-
-# Untuk frontend
-cd frontend
-rm -rf node_modules
-npm install
-```
-
-### Masalah: Prisma Client Not Found
-
-**Gejala:** Error `PrismaClient is not a constructor` atau `@prisma/client` not found.
-
-**Solusi:**
-
+### Error: `PrismaClient is not a constructor`
 ```bash
 cd backend
 npx prisma generate
 ```
 
-### Masalah: CORS Error
-
-**Gejala:** Error CORS di browser saat frontend memanggil API backend.
-
-**Solusi:**
-
-Pastikan `CORS_ORIGIN` di `backend/.env` sesuai dengan URL frontend:
-
-```env
-CORS_ORIGIN=http://localhost:5173
+### Database error saat `db push` / `db:seed`
+```bash
+# Reset database (hapus + buat ulang + seed)
+cd backend
+npm run db:reset
 ```
 
-Jika menggunakan jaringan yang berbeda, atur `CORS_ORIGINS` (dipisah koma):
+### CORS error di browser
+Pastikan `CORS_ORIGIN` di `backend/.env` sesuai URL frontend (`http://localhost:5173`). Untuk beberapa origin, gunakan `CORS_ORIGINS` (dipisah koma/spasi).
 
-```env
-CORS_ORIGINS=http://localhost:5173, http://192.168.1.100:5173
-```
+### Data real-time tidak muncul
+1. Pastikan backend berjalan dan `http://localhost:5000/api/health` merespons.
+2. Pastikan `VITE_SOCKET_URL` di `frontend/.env` benar.
+3. Pastikan device terdaftar aktif dan sesi monitoring telah dimulai.
+4. Cek browser console untuk error WebSocket.
 
-### Masalah: Socket.IO Tidak Terhubung
-
-**Gejala:** Data real-time tidak muncul di dashboard.
-
-**Solusi:**
-
-1. Pastikan backend berjalan (cek `http://localhost:5000/api/health`).
-2. Pastikan `VITE_SOCKET_URL` di frontend sesuai dengan URL backend.
-3. Periksa browser console untuk error koneksi WebSocket.
-4. Pastikan tidak ada firewall yang memblokir koneksi WebSocket.
+### Device mengirim data tetapi tidak tercatat ke pasien
+Pastikan sesi monitoring **ACTIVE** untuk device tersebut (mulai dari halaman Monitoring). Reading akan otomatis dikaitkan ke pasien dari sesi.
 
 ---
 
 ## Perintah Cepat
 
 ### Backend
-
 ```bash
-# Generate Prisma Client
-cd backend && npx prisma generate
-
-# Push schema + seed database
-cd backend && npx prisma db push && npm run db:seed
-
-# Reset database + seed
-cd backend && npm run db:reset
-
-# Buka database GUI
-cd backend && npx prisma studio
-
-# Build untuk production
-cd backend && npm run build
-
-# Jalankan production
-cd backend && npm start
+cd backend
+npm run dev          # jalankan development server
+npm run build        # compile TypeScript → dist/
+npm start            # jalankan production dari dist/
+npm run db:generate  # generate Prisma client
+npm run db:push      # push schema ke database
+npm run db:seed      # seed data contoh
+npm run db:reset     # reset database + seed
+npm run db:studio    # GUI database (localhost:5555)
+npm run lint         # lint backend
+npm test             # jalankan test backend
 ```
 
 ### Frontend
-
 ```bash
-# Build untuk production
-cd frontend && npm run build
+cd frontend
+npm run dev          # development server (localhost:5173)
+npm run build        # build production (tsc + vite build)
+npm run preview      # preview build production
+npm run lint         # lint (oxlint)
+npm test             # jalankan test frontend
+```
 
-# Preview build
-cd frontend && npm run preview
-
-# Lint kode
-cd frontend && npm run lint
+### Root
+```bash
+npm run dev              # backend + frontend sekaligus
+npm run build            # build keduanya
+npm run lint             # lint keduanya
+npm test                 # test keduanya
+npm run docker:up        # jalankan docker compose
+npm run docker:down      # stop docker compose
 ```
