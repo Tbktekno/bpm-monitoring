@@ -24,6 +24,105 @@ function getDateRange(year: number, month?: number): { start: Date; end: Date } 
 }
 
 /**
+ * Suspected disease classification based on average BPM & SpO₂.
+ * Consistent with the frontend calculateDiseaseStatus:
+ * - SpO₂ < 95%: Dugaan Hipoksemia
+ * - BPM < 60: Dugaan Bradikardia
+ * - BPM > 100: Dugaan Takikardia
+ * - otherwise: Normal
+ */
+function calculateDiseaseStatus(bpm: number, spo2: number): string {
+  if (spo2 < 95) return 'Dugaan Hipoksemia';
+  if (bpm < 60) return 'Dugaan Bradikardia';
+  if (bpm > 100) return 'Dugaan Takikardia';
+  return 'Normal';
+}
+
+// ─── PDF table helpers ────────────────────────────────────────────────────────
+type PdfCell = string | { text: string; bold?: boolean; color?: string };
+
+/**
+ * Draw a bordered grid table on the PDF document.
+ * Returns the Y coordinate right after the last drawn row.
+ */
+function drawPdfTable(
+  doc: PDFKit.PDFDocument,
+  startY: number,
+  colWidths: number[],
+  header: string[],
+  rows: PdfCell[][],
+  options: { headerBg?: string; cellHeight?: number } = {}
+): number {
+  const cellHeight = options.cellHeight ?? 22;
+  const headerHeight = 26;
+  const headerBg = options.headerBg || '#E2E8F0';
+  const left = doc.page.margins.left;
+  let y = startY;
+
+  // Header row
+  let x = left;
+  for (let i = 0; i < header.length; i++) {
+    doc.rect(x, y, colWidths[i], headerHeight).fillAndStroke(headerBg, '#94A3B8');
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#1E293B');
+    doc.text(header[i], x + 5, y + (headerHeight - 11) / 2, { width: colWidths[i] - 10, align: 'center' });
+    x += colWidths[i];
+  }
+  y += headerHeight;
+
+  // Data rows
+  for (let r = 0; r < rows.length; r++) {
+    x = left;
+    const row = rows[r];
+    for (let c = 0; c < colWidths.length; c++) {
+      doc.rect(x, y, colWidths[c], cellHeight).stroke('#94A3B8');
+      const cell = row[c];
+      const text = typeof cell === 'string' ? cell : cell?.text ?? '';
+      const bold = typeof cell === 'string' ? false : Boolean(cell?.bold);
+      const color = typeof cell === 'string' ? '#334155' : cell?.color ?? '#334155';
+      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor(color);
+      doc.text(text, x + 5, y + (cellHeight - 11) / 2, { width: colWidths[c] - 10, align: c === 0 ? 'left' : 'center' });
+      x += colWidths[c];
+    }
+    y += cellHeight;
+  }
+
+  return y;
+}
+
+/**
+ * Draw a full-width info row (two label/value pairs) used for patient data.
+ * Returns the Y coordinate right after the drawn row.
+ */
+function drawInfoRow(
+  doc: PDFKit.PDFDocument,
+  startY: number,
+  colWidths: number[],
+  values: [string, string, string, string],
+  options: { labelBg?: string; cellHeight?: number } = {}
+): number {
+  const cellHeight = options.cellHeight ?? 24;
+  const labelBg = options.labelBg || '#F1F5F9';
+  const left = doc.page.margins.left;
+  let x = left;
+
+  for (let i = 0; i < colWidths.length; i++) {
+    const isLabel = i % 2 === 0;
+    doc.rect(x, startY, colWidths[i], cellHeight).fillAndStroke(isLabel ? labelBg : '#FFFFFF', '#94A3B8');
+    doc.font(isLabel ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor(isLabel ? '#475569' : '#1E293B');
+    doc.text(values[i] ?? '', x + 6, startY + (cellHeight - 11) / 2, { width: colWidths[i] - 12, align: 'left' });
+    x += colWidths[i];
+  }
+
+  return startY + cellHeight;
+}
+
+function diagnosisColor(diagnosis: string): string {
+  if (diagnosis === 'Normal') return '#16A34A';
+  if (diagnosis === 'Dugaan Hipoksemia') return '#DC2626';
+  return '#D97706';
+}
+
+/**
  * GET /api/v1/reports/daily
  * Daily aggregation report — number of readings per day in a date range.
  */
@@ -488,63 +587,92 @@ export async function exportSessionPdf(req: Request, res: Response, next: NextFu
     const readings = session.readings;
     const avgBpm = readings.length > 0 ? Math.round(readings.reduce((s, r) => s + r.bpm, 0) / readings.length) : 0;
     const avgSpo2 = readings.length > 0 ? Math.round(readings.reduce((s, r) => s + r.spo2, 0) / readings.length) : 0;
-    const normalCount = readings.filter((r) => r.status === 'NORMAL').length;
-    const waspadaCount = readings.filter((r) => r.status === 'WASPADA').length;
-    const daruratCount = readings.filter((r) => r.status === 'DARURAT').length;
+
+    // Suspected disease based on average BPM & SpO₂
+    const diagnosis = calculateDiseaseStatus(avgBpm, avgSpo2);
+
+    // Resolve device display name from the registered ESP32 devices table
+    const deviceInfo = session.deviceId
+      ? await prisma.esp32Device.findUnique({ where: { deviceId: session.deviceId } })
+      : null;
+    const deviceName = deviceInfo?.label || session.deviceId || '—';
+
+    const left = 50;
+    const right = 545;
+    const contentWidth = right - left;
 
     // Create PDF
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="sesi-${sessionId}-${new Date().toISOString().split('T')[0]}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="laporan-sesi-${sessionId}-${new Date().toISOString().split('T')[0]}.pdf"`);
     doc.pipe(res);
 
-    // Title
-    doc.fontSize(20).font('Helvetica-Bold').text('Laporan Sesi Monitoring', { align: 'center' });
-    doc.moveDown(0.3);
-    doc.fontSize(12).font('Helvetica').text(`Pasien: ${session.patient?.name || '-'}`, { align: 'center' });
-    doc.fontSize(10).text(`ID: ${session.patient?.patientId || '-'}`, { align: 'center' });
+    // ── Document header ──────────────────────────────────────────────────────
+    doc.rect(0, 0, doc.page.width, 12).fill('#1E40AF');
     doc.moveDown(0.5);
-    doc.fontSize(9).text(`Mulai: ${session.startTime.toLocaleString('id-ID')}`, { align: 'center' });
-    doc.text(`Selesai: ${session.endTime?.toLocaleString('id-ID') || '-'}`, { align: 'center' });
-    doc.text(`Device: ${session.deviceId || '-'}`, { align: 'center' });
-    doc.moveDown(1);
+    doc.fontSize(16).font('Helvetica-Bold').fillColor('#1E40AF')
+      .text('LAPORAN HASIL MONITORING', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').fillColor('#475569')
+      .text('Denyut Jantung (BPM) & Saturasi Oksigen (SpO\u2082)', { align: 'center' });
+    doc.moveDown(0.4);
 
-    // Summary
-    doc.fontSize(14).font('Helvetica-Bold').text('Ringkasan');
-    doc.moveDown(0.3);
-    doc.fontSize(10).font('Helvetica');
-    doc.text(`Total Data: ${readings.length}`);
-    doc.text(`Rata-rata BPM: ${avgBpm} bpm`);
-    doc.text(`Rata-rata SpO₂: ${avgSpo2}%`);
-    doc.text(`Normal: ${normalCount} | Waspada: ${waspadaCount} | Darurat: ${daruratCount}`);
-    doc.moveDown(1);
-
-    // Readings table
-    doc.fontSize(14).font('Helvetica-Bold').text('Detail Data');
-    doc.moveDown(0.3);
-
-    const cols = { time: 50, bpm: 180, spo2: 260, bpmStatus: 320, spo2Status: 390, status: 460 };
-    doc.fontSize(8).font('Helvetica-Bold');
-    doc.text('Waktu', cols.time, doc.y);
-    doc.text('BPM', cols.bpm, doc.y);
-    doc.text('SpO₂', cols.spo2, doc.y);
-    doc.text('BPM Status', cols.bpmStatus, doc.y);
-    doc.text('SpO₂ Status', cols.spo2Status, doc.y);
-    doc.text('Status', cols.status, doc.y);
-    doc.moveDown(0.3);
-
-    doc.fontSize(7).font('Helvetica');
+    // ── Patient & session info table ────────────────────────────────────────
+    const infoCols = [105, 140, 105, 140];
     let y = doc.y;
-    for (const r of readings) {
-      if (y > 730) { doc.addPage(); y = 50; }
-      doc.text(r.createdAt.toLocaleString('id-ID'), cols.time, y, { width: 125 });
-      doc.text(String(r.bpm), cols.bpm, y);
-      doc.text(`${r.spo2}%`, cols.spo2, y);
-      doc.text(r.bpmStatus, cols.bpmStatus, y, { width: 70 });
-      doc.text(r.spo2Status, cols.spo2Status, y, { width: 70 });
-      doc.text(r.status, cols.status, y);
-      y += 13;
-    }
+    y = drawInfoRow(doc, y, infoCols, ['Nama Pasien', session.patient?.name || '-', 'ID Pasien', session.patient?.patientId || '-']);
+    y = drawInfoRow(doc, y, infoCols, ['Waktu Mulai', session.startTime.toLocaleString('id-ID'), 'Waktu Selesai', session.endTime?.toLocaleString('id-ID') || '-']);
+    y = drawInfoRow(doc, y, infoCols, ['Device', deviceName, 'Total Data', `${readings.length} data`]);
+    doc.y = y + 18;
+
+    // ── Results table ────────────────────────────────────────────────────────
+    const bpmKeterangan = avgBpm < 60 ? 'Rendah' : avgBpm > 100 ? 'Tinggi' : 'Normal';
+    const spo2Keterangan = avgSpo2 < 95 ? 'Rendah' : 'Normal';
+
+    doc.font('Helvetica-Bold').fontSize(10).fillColor('#1E293B').text('HASIL PEMERIKSAAN');
+    doc.moveDown(0.3);
+
+    const resultCols = [170, 105, 110, 105];
+    y = drawPdfTable(
+      doc,
+      doc.y,
+      resultCols,
+      ['Parameter', 'Rata-rata', 'Nilai Normal', 'Keterangan'],
+      [
+        [
+          'BPM — Denyut Jantung',
+          `${avgBpm} bpm`,
+          '60 – 100 bpm',
+          { text: bpmKeterangan, bold: true, color: bpmKeterangan === 'Normal' ? '#16A34A' : '#DC2626' },
+        ],
+        [
+          'SpO\u2082 — Saturasi Oksigen',
+          `${avgSpo2}%`,
+          '95 – 100%',
+          { text: spo2Keterangan, bold: true, color: spo2Keterangan === 'Normal' ? '#16A34A' : '#DC2626' },
+        ],
+      ],
+      { cellHeight: 26 }
+    );
+
+    // ── Disease status box ───────────────────────────────────────────────────
+    y = y + 14;
+    doc.rect(left, y, contentWidth, 64).fillAndStroke('#F8FAFC', '#CBD5E1');
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#475569').text('STATUS PENYAKIT (DUGAAN)', left + 12, y + 10);
+    doc.font('Helvetica-Bold').fontSize(13).fillColor(diagnosisColor(diagnosis)).text(diagnosis, left + 12, y + 26);
+    doc.font('Helvetica').fontSize(8.5).fillColor('#64748B')
+      .text(
+        `Berdasarkan rata-rata BPM ${avgBpm} bpm dan SpO\u2082 ${avgSpo2}% selama sesi monitoring.`,
+        left + 12,
+        y + 46,
+        { width: contentWidth - 24 }
+      );
+    doc.y = y + 64 + 18;
+
+    // ── Footer (generated info) ──────────────────────────────────────────────
+    // Pastikan tetap dalam batas bawah margin agar tidak membuat halaman baru
+    const footerY = doc.page.height - doc.page.margins.bottom - 10;
+    doc.font('Helvetica').fontSize(8).fillColor('#94A3B8')
+      .text(`Dokumen dihasilkan otomatis oleh Sistem Monitoring BPM & SpO\u2082 — ${new Date().toLocaleString('id-ID')}`, left, footerY, { width: contentWidth, align: 'center' });
 
     doc.end();
     logger.info(`Session PDF exported: session=${sessionId} readings=${readings.length}`);

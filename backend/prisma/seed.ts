@@ -193,6 +193,7 @@ async function main(): Promise<void> {
   const session1 = await prisma.monitoringSession.create({
     data: {
       patientId: patients[0].id,
+      deviceId: 'ESP32-ALPHA-001',
       status: 'ACTIVE',
       startTime: new Date(now.getTime() - 60 * 60 * 1000), // 1 hour ago
       notes: 'Pasien dalam observasi tekanan darah',
@@ -235,6 +236,7 @@ async function main(): Promise<void> {
   const session2 = await prisma.monitoringSession.create({
     data: {
       patientId: patients[1].id,
+      deviceId: 'ESP32-BETA-002',
       status: 'ACTIVE',
       startTime: new Date(now.getTime() - 45 * 60 * 1000),
       notes: 'Monitoring saturasi oksigen',
@@ -277,6 +279,7 @@ async function main(): Promise<void> {
   const session3 = await prisma.monitoringSession.create({
     data: {
       patientId: patients[2].id,
+      deviceId: 'ESP32-ALPHA-001',
       status: 'ACTIVE',
       startTime: new Date(now.getTime() - 30 * 60 * 1000),
       notes: 'Observasi pasca angina',
@@ -319,6 +322,7 @@ async function main(): Promise<void> {
   const session4 = await prisma.monitoringSession.create({
     data: {
       patientId: patients[3].id,
+      deviceId: 'ESP32-BETA-002',
       status: 'COMPLETED',
       startTime: new Date(now.getTime() - 24 * 60 * 60 * 1000), // yesterday
       endTime: new Date(now.getTime() - 23 * 60 * 60 * 1000),
@@ -362,6 +366,7 @@ async function main(): Promise<void> {
   const session5 = await prisma.monitoringSession.create({
     data: {
       patientId: patients[4].id,
+      deviceId: 'ESP32-ALPHA-001',
       status: 'ACTIVE',
       startTime: new Date(now.getTime() - 15 * 60 * 1000),
       notes: 'Routine check',
@@ -404,6 +409,7 @@ async function main(): Promise<void> {
   const session6 = await prisma.monitoringSession.create({
     data: {
       patientId: patients[5].id,
+      deviceId: 'ESP32-ALPHA-001',
       status: 'COMPLETED',
       startTime: new Date(now.getTime() - 10 * 60 * 1000),
       endTime: new Date(now.getTime() - 5 * 60 * 1000),

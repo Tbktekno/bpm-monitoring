@@ -3,6 +3,7 @@ import { IoDownloadOutline, IoPulseOutline, IoHeart, IoWaterOutline, IoTimeOutli
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { calculateDiseaseStatus, STATUS_COLORS } from '@/constants';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -308,36 +309,21 @@ export default function Reports() {
               );
             })()}
 
-            {/* Readings table */}
-            {sessionDetail.readings.length > 0 ? (
-              <div>
-                <p className="text-sm font-semibold text-slate-700 mb-2">Detail Data</p>
-                <div className="border rounded-xl overflow-hidden">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-gray-50 text-slate-500">
-                        <th className="p-2.5 text-left font-medium">Waktu</th>
-                        <th className="p-2.5 text-right font-medium">BPM</th>
-                        <th className="p-2.5 text-right font-medium">SpO₂</th>
-                        <th className="p-2.5 text-center font-medium">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sessionDetail.readings.map((r: any) => (
-                        <tr key={r.id} className="border-t border-gray-100 hover:bg-gray-50">
-                          <td className="p-2.5 text-slate-400">{formatTime(r.createdAt)}</td>
-                          <td className={`p-2.5 text-right font-semibold ${r.bpm < 60 || r.bpm > 100 ? 'text-danger-500' : 'text-success-500'}`}>{r.bpm}</td>
-                          <td className={`p-2.5 text-right font-semibold ${r.spo2 < 95 ? 'text-danger-500' : 'text-blue-500'}`}>{r.spo2}%</td>
-                          <td className="p-2.5 text-center"><StatusBadge bpm={r.bpm} spo2={r.spo2} status={r.status} size="sm" /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            {/* Suspected disease status */}
+            {(() => {
+              const stats = computeStats(sessionDetail.readings);
+              const diagnosis = calculateDiseaseStatus(stats.avgBpm, stats.avgSpo2);
+              const colors = STATUS_COLORS[diagnosis as keyof typeof STATUS_COLORS] || STATUS_COLORS.Normal;
+              return (
+                <div className={`rounded-xl p-4 ${colors.bg}`}>
+                  <p className="text-xs font-medium text-slate-500 mb-1">🩺 Status Penyakit</p>
+                  <p className={`text-lg font-bold ${colors.text}`}>{diagnosis}</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Berdasarkan rata-rata BPM {stats.avgBpm} & SpO₂ {stats.avgSpo2}%
+                  </p>
                 </div>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400 text-center py-4">Tidak ada data</p>
-            )}
+              );
+            })()}
 
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="secondary" onClick={() => handleExportSessionPdf(selectedSession!.id)}>
