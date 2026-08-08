@@ -28,15 +28,7 @@ function calculateSpo2Status(spo2: number): string {
 
 function calculateCompositeStatus(bpmStatus: string, spo2Status: string): string {
   if (bpmStatus === 'NORMAL' && spo2Status === 'NORMAL') return 'NORMAL';
-  if (
-    bpmStatus === 'BRADICARDIA' ||
-    bpmStatus === 'TACHY_BERAT' ||
-    spo2Status === 'HIPOKSEMIA_SEDANG' ||
-    spo2Status === 'HIPOKSEMIA_BERAT'
-  ) {
-    return 'DARURAT';
-  }
-  return 'WASPADA';
+  return 'PERLU_PEMERIKSAAN';
 }
 
 function computeAge(birthDate: Date): number {
@@ -99,8 +91,6 @@ async function main(): Promise<void> {
       bloodType: 'O',
       height: 170,
       weight: 75,
-      medicalHistory: 'Hipertensi stage 1, DM tipe 2',
-      doctorNote: 'Kontrol rutin tekanan darah dan gula darah',
     },
     {
       patientId: 'P-002',
@@ -113,8 +103,6 @@ async function main(): Promise<void> {
       bloodType: 'A',
       height: 158,
       weight: 55,
-      medicalHistory: 'Asma bronkial, alergi obat NSAID',
-      doctorNote: 'Hindari pemicu asma, sediakan inhaler',
     },
     {
       patientId: 'P-003',
@@ -127,8 +115,6 @@ async function main(): Promise<void> {
       bloodType: 'B',
       height: 165,
       weight: 80,
-      medicalHistory: 'PJK, hiperkolesterolemia, post-MI 2019',
-      doctorNote: 'Ekokardiografi rutin, pantau lipid profile',
     },
     {
       patientId: 'P-004',
@@ -141,8 +127,6 @@ async function main(): Promise<void> {
       bloodType: 'AB',
       height: 162,
       weight: 52,
-      medicalHistory: 'Anemia defisiensi besi, hipotensi ortostatik',
-      doctorNote: 'Suplemen Fe, monitoring Hb rutin',
     },
     {
       patientId: 'P-005',
@@ -155,8 +139,6 @@ async function main(): Promise<void> {
       bloodType: 'O',
       height: 172,
       weight: 70,
-      medicalHistory: 'Sehat, riwayat keluarga hipertensi',
-      doctorNote: 'Medical check-up tahunan',
     },
     {
       patientId: 'P-006',
@@ -169,8 +151,6 @@ async function main(): Promise<void> {
       bloodType: 'B',
       height: 168,
       weight: 65,
-      medicalHistory: '-',
-      doctorNote: '-',
     },
   ];
 

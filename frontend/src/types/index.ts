@@ -47,8 +47,6 @@ export interface Patient {
   bloodType: string | null;
   height: number | null;
   weight: number | null;
-  medicalHistory: string | null;
-  doctorNote: string | null;
   status?: string;
   readings?: Array<{
     status: string;
@@ -71,13 +69,11 @@ export interface PatientFormData {
   bloodType: string;
   height: number;
   weight: number;
-  medicalHistory?: string;
-  doctorNote?: string;
 }
 
-export type PatientStatus = 'Normal' | 'Waspada' | 'Darurat';
+export type PatientStatus = 'Normal' | 'Perlu Pemeriksaan';
 
-export type BackendPatientStatus = 'NORMAL' | 'WASPADA' | 'DARURAT';
+export type BackendPatientStatus = 'NORMAL' | 'PERLU_PEMERIKSAAN';
 
 export interface MonitoringReading {
   id: number;
@@ -102,8 +98,7 @@ export interface DashboardStats {
   totalPatients: number;
   statusDistribution: {
     normal: number;
-    waspada: number;
-    darurat: number;
+    perluPemeriksaan: number;
     tanpaData: number;
   };
   averages: {

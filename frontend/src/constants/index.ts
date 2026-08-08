@@ -33,35 +33,37 @@ export const STATUS_COLORS = {
     dot: 'bg-warning-500',
     border: 'border-warning-500',
   },
+  'Penurunan Saturasi Oksigen': {
+    bg: 'bg-warning-50',
+    text: 'text-warning-600',
+    dot: 'bg-warning-500',
+    border: 'border-warning-500',
+  },
   'Dugaan Hipoksemia': {
     bg: 'bg-danger-50',
     text: 'text-danger-600',
     dot: 'bg-danger-500',
     border: 'border-danger-500',
   },
-  Waspada: {
+  'Perlu Pemeriksaan': {
     bg: 'bg-warning-50',
     text: 'text-warning-600',
     dot: 'bg-warning-500',
     border: 'border-warning-500',
   },
-  Darurat: {
-    bg: 'bg-danger-50',
-    text: 'text-danger-600',
-    dot: 'bg-danger-500',
-    border: 'border-danger-500',
-  },
 } as const;
 
 /**
- * Disease classification logic according to standard vital signs matrix:
- * - SpO₂ < 95% (any BPM): Dugaan Hipoksemia
- * - SpO₂ 95-100% & BPM 60-100: Normal
- * - SpO₂ 95-100% & BPM < 60: Dugaan Bradikardia
- * - SpO₂ 95-100% & BPM > 100: Dugaan Takikardia
+ * Classification logic based on BPM & SpO₂ matrix:
+ * - SpO₂ < 90% (any BPM): Dugaan Hipoksemia
+ * - SpO₂ 90-94% (any BPM): Penurunan Saturasi Oksigen
+ * - SpO₂ >= 95% & BPM 60-100: Normal
+ * - SpO₂ >= 95% & BPM < 60: Dugaan Bradikardia
+ * - SpO₂ >= 95% & BPM > 100: Dugaan Takikardia
  */
 export function calculateDiseaseStatus(bpm: number, spo2: number): string {
-  if (spo2 < 95) return 'Dugaan Hipoksemia';
+  if (spo2 < 90) return 'Dugaan Hipoksemia';
+  if (spo2 < 95) return 'Penurunan Saturasi Oksigen';
   if (bpm < 60) return 'Dugaan Bradikardia';
   if (bpm > 100) return 'Dugaan Takikardia';
   return 'Normal';
@@ -82,11 +84,11 @@ export const GENDER_OPTIONS = [
 export const STATUS_FILTERS = [
   { value: '', label: 'Semua Status' },
   { value: 'Normal', label: 'Normal' },
+  { value: 'Perlu Pemeriksaan', label: 'Perlu Pemeriksaan' },
   { value: 'Dugaan Bradikardia', label: 'Dugaan Bradikardia' },
   { value: 'Dugaan Takikardia', label: 'Dugaan Takikardia' },
+  { value: 'Penurunan Saturasi Oksigen', label: 'Penurunan Saturasi Oksigen' },
   { value: 'Dugaan Hipoksemia', label: 'Dugaan Hipoksemia' },
-  { value: 'Waspada', label: 'Waspada' },
-  { value: 'Darurat', label: 'Darurat' },
 ] as const;
 
 export const ITEMS_PER_PAGE = 10;

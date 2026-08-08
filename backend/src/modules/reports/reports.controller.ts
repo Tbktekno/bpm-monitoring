@@ -1,10 +1,9 @@
 // =============================================================================
-// Reports Controller — Daily/Monthly Aggregation, PDF & Excel Export
+// Reports Controller — Daily/Monthly Aggregation & PDF Export
 // =============================================================================
 
 import { Request, Response, NextFunction } from 'express';
 import PDFDocument from 'pdfkit';
-import ExcelJS from 'exceljs';
 import { prisma } from '../../config/database';
 import { ValidationError } from '../../shared/app-error';
 import { logger } from '../../server/middleware/request-logger';
@@ -24,15 +23,17 @@ function getDateRange(year: number, month?: number): { start: Date; end: Date } 
 }
 
 /**
- * Suspected disease classification based on average BPM & SpO₂.
+ * Classification based on average BPM & SpO₂.
  * Consistent with the frontend calculateDiseaseStatus:
- * - SpO₂ < 95%: Dugaan Hipoksemia
+ * - SpO₂ < 90%: Dugaan Hipoksemia
+ * - SpO₂ 90-94%: Penurunan Saturasi Oksigen
  * - BPM < 60: Dugaan Bradikardia
  * - BPM > 100: Dugaan Takikardia
  * - otherwise: Normal
  */
 function calculateDiseaseStatus(bpm: number, spo2: number): string {
-  if (spo2 < 95) return 'Dugaan Hipoksemia';
+  if (spo2 < 90) return 'Dugaan Hipoksemia';
+  if (spo2 < 95) return 'Penurunan Saturasi Oksigen';
   if (bpm < 60) return 'Dugaan Bradikardia';
   if (bpm > 100) return 'Dugaan Takikardia';
   return 'Normal';
@@ -183,8 +184,7 @@ export async function getDailyReport(req: Request, res: Response, next: NextFunc
       const entry = dailyMap.get(day)!;
       entry.totalReadings++;
       if (r.status === 'NORMAL') entry.normalCount++;
-      else if (r.status === 'WASPADA') entry.waspadaCount++;
-      else if (r.status === 'DARURAT') entry.daruratCount++;
+      else entry.waspadaCount++;
       entry.bpmValues.push(r.bpm);
       entry.spo2Values.push(r.spo2);
     }
@@ -203,8 +203,8 @@ export async function getDailyReport(req: Request, res: Response, next: NextFunc
     // Summary
     const totalReadings = readings.length;
     const normalCount = readings.filter((r) => r.status === 'NORMAL').length;
-    const waspadaCount = readings.filter((r) => r.status === 'WASPADA').length;
-    const daruratCount = readings.filter((r) => r.status === 'DARURAT').length;
+    const waspadaCount = readings.filter((r) => r.status !== 'NORMAL').length;
+    const daruratCount = 0;
 
     res.json({
       success: true,
@@ -284,8 +284,7 @@ export async function getMonthlyReport(req: Request, res: Response, next: NextFu
       entry.totalReadings++;
       if (r.patientId !== null) entry.uniquePatients.add(r.patientId);
       if (r.status === 'NORMAL') entry.normalCount++;
-      else if (r.status === 'WASPADA') entry.waspadaCount++;
-      else if (r.status === 'DARURAT') entry.daruratCount++;
+      else entry.waspadaCount++;
       entry.bpmValues.push(r.bpm);
       entry.spo2Values.push(r.spo2);
     }
@@ -356,8 +355,7 @@ export async function exportPdf(req: Request, res: Response, next: NextFunction)
 
     // Compute summary
     const normalCount = readings.filter((r) => r.status === 'NORMAL').length;
-    const waspadaCount = readings.filter((r) => r.status === 'WASPADA').length;
-    const daruratCount = readings.filter((r) => r.status === 'DARURAT').length;
+    const perluPemeriksaanCount = readings.filter((r) => r.status !== 'NORMAL').length;
 
     // Create PDF
     const doc = new PDFDocument({
@@ -388,8 +386,7 @@ export async function exportPdf(req: Request, res: Response, next: NextFunction)
     doc.fontSize(10).font('Helvetica');
     doc.text(`Total Readings: ${readings.length}`);
     doc.text(`Normal: ${normalCount}`);
-    doc.text(`Waspada: ${waspadaCount}`);
-    doc.text(`Darurat: ${daruratCount}`);
+    doc.text(`Perlu Pemeriksaan: ${perluPemeriksaanCount}`);
     doc.moveDown(1);
 
     // Readings table
@@ -439,122 +436,6 @@ export async function exportPdf(req: Request, res: Response, next: NextFunction)
     doc.end();
 
     logger.info(`PDF exported: ${readings.length} readings`);
-  } catch (err) {
-    next(err);
-  }
-}
-
-/**
- * GET /api/v1/reports/export/excel
- * Exports a report as Excel file using ExcelJS.
- */
-export async function exportExcel(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    let startDate = req.query.startDate ? new Date(String(req.query.startDate ?? '')) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    let endDate = req.query.endDate ? new Date(String(req.query.endDate ?? '')) : new Date();
-
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      throw new ValidationError('Invalid date format');
-    }
-
-    // ⚠ endDate harus akhir hari
-    endDate = new Date(endDate.getTime() + 24 * 60 * 60 * 1000 - 1);
-
-    // Fetch data
-    const readings = await prisma.reading.findMany({
-      where: {
-        createdAt: { gte: startDate, lte: endDate },
-      },
-      include: {
-        patient: {
-          select: { patientId: true, name: true, gender: true, age: true },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 10000,
-    });
-
-    // Compute summary
-    const normalCount = readings.filter((r) => r.status === 'NORMAL').length;
-    const waspadaCount = readings.filter((r) => r.status === 'WASPADA').length;
-    const daruratCount = readings.filter((r) => r.status === 'DARURAT').length;
-
-    // Create workbook
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'BPM Monitoring Dashboard';
-    workbook.created = new Date();
-
-    // ── Summary sheet ────────────────────────────────────────────────────────
-    const summarySheet = workbook.addWorksheet('Summary');
-    summarySheet.columns = [
-      { header: 'Metric', key: 'metric', width: 25 },
-      { header: 'Value', key: 'value', width: 20 },
-    ];
-
-    summarySheet.addRow({ metric: 'Period Start', value: startDate.toISOString().split('T')[0] });
-    summarySheet.addRow({ metric: 'Period End', value: endDate.toISOString().split('T')[0] });
-    summarySheet.addRow({ metric: 'Total Readings', value: readings.length });
-    summarySheet.addRow({ metric: 'Normal', value: normalCount });
-    summarySheet.addRow({ metric: 'Waspada', value: waspadaCount });
-    summarySheet.addRow({ metric: 'Darurat', value: daruratCount });
-
-    // Style header
-    summarySheet.getRow(1).font = { bold: true };
-    summarySheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF4472C4' },
-    };
-    summarySheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-
-    // ── Readings sheet ───────────────────────────────────────────────────────
-    const readingsSheet = workbook.addWorksheet('Readings');
-    readingsSheet.columns = [
-      { header: 'Date/Time', key: 'createdAt', width: 20 },
-      { header: 'Patient ID', key: 'patientId', width: 12 },
-      { header: 'Patient Name', key: 'patientName', width: 25 },
-      { header: 'Gender', key: 'gender', width: 8 },
-      { header: 'Age', key: 'age', width: 8 },
-      { header: 'BPM', key: 'bpm', width: 8 },
-      { header: 'SpO₂', key: 'spo2', width: 8 },
-      { header: 'BPM Status', key: 'bpmStatus', width: 18 },
-      { header: 'SpO₂ Status', key: 'spo2Status', width: 20 },
-      { header: 'Overall Status', key: 'status', width: 15 },
-    ];
-
-    // Header styling
-    readingsSheet.getRow(1).font = { bold: true };
-    readingsSheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF4472C4' },
-    };
-    readingsSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-
-    // Add data
-    for (const r of readings) {
-      readingsSheet.addRow({
-        createdAt: r.createdAt.toISOString(),
-        patientId: r.patient?.patientId || '',
-        patientName: r.patient?.name || 'Unknown',
-        gender: r.patient?.gender || '',
-        age: r.patient?.age || 0,
-        bpm: r.bpm,
-        spo2: r.spo2,
-        bpmStatus: r.bpmStatus,
-        spo2Status: r.spo2Status,
-        status: r.status,
-      });
-    }
-
-    // ── Write to response ────────────────────────────────────────────────────
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="bpm-report-${new Date().toISOString().split('T')[0]}.xlsx"`);
-
-    await workbook.xlsx.write(res);
-    res.end();
-
-    logger.info(`Excel exported: ${readings.length} readings`);
   } catch (err) {
     next(err);
   }

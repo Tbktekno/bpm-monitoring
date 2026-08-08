@@ -129,7 +129,7 @@ function spo2Color(spo2: number): string {
   const statCards = [
     {
       icon: <IoPeopleOutline />,
-      label: 'Total Pasien',
+      label: 'Total Responden',
       value: stats?.totalPatients ?? 0,
       color: 'primary' as const,
     },
@@ -141,14 +141,14 @@ function spo2Color(spo2: number): string {
     },
     {
       icon: <IoWarningOutline />,
-      label: 'Waspada',
-      value: stats?.statusDistribution?.waspada ?? 0,
+      label: 'Perlu Pemeriksaan',
+      value: stats?.statusDistribution?.perluPemeriksaan ?? 0,
       color: 'warning' as const,
     },
     {
       icon: <IoAlertCircleOutline />,
-      label: 'Darurat',
-      value: stats?.statusDistribution?.darurat ?? 0,
+      label: 'Tanpa Data',
+      value: stats?.statusDistribution?.tanpaData ?? 0,
       color: 'danger' as const,
     },
   ];

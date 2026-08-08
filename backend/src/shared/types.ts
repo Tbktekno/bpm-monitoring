@@ -21,8 +21,7 @@ export type Spo2Status = (typeof SPO2_STATUS)[keyof typeof SPO2_STATUS];
 
 export const COMPOSITE_STATUS = {
   NORMAL: 'NORMAL',
-  WASPADA: 'WASPADA',
-  DARURAT: 'DARURAT',
+  PERLU_PEMERIKSAAN: 'PERLU_PEMERIKSAAN',
 } as const;
 export type CompositeStatus = (typeof COMPOSITE_STATUS)[keyof typeof COMPOSITE_STATUS];
 

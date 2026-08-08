@@ -20,7 +20,7 @@ import { useAuthContext } from '@/contexts/AuthContext';
 
 const navItems = [
   { to: '/', icon: IoGridOutline, label: 'Dashboard' },
-  { to: '/patients', icon: IoPeopleOutline, label: 'Pasien' },
+  { to: '/patients', icon: IoPeopleOutline, label: 'Responden' },
   { to: '/monitoring', icon: IoPulseOutline, label: 'Monitoring' },
   { to: '/history', icon: IoTimeOutline, label: 'Riwayat' },
   { to: '/reports', icon: IoBarChartOutline, label: 'Laporan' },
@@ -29,7 +29,7 @@ const navItems = [
 
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
-  '/patients': 'Pasien',
+  '/patients': 'Responden',
   '/monitoring': 'Monitoring',
   '/history': 'Riwayat',
   '/reports': 'Laporan',

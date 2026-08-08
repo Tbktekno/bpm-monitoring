@@ -57,8 +57,6 @@ model Patient {
   bloodType      String?                                                    // A, B, AB, O
   height         Float?                                                     // cm
   weight         Float?                                                     // kg
-  medicalHistory String?                                                    // Encrypted at rest
-  doctorNote     String?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 

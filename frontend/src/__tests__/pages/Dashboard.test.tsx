@@ -12,8 +12,8 @@ const mockDashboardData = {
   totalPatients: 25,
   statusDistribution: {
     normal: 15,
-    waspada: 7,
-    darurat: 3,
+    perluPemeriksaan: 10,
+    tanpaData: 0,
   },
   averages: {
     avgBpm: 78,
@@ -109,23 +109,22 @@ describe('Dashboard Page', () => {
 
   it('renders all stat card labels', () => {
     renderWithProviders(<Dashboard />);
-    expect(screen.getByText('Total Pasien')).toBeInTheDocument();
+    expect(screen.getByText('Total Responden')).toBeInTheDocument();
     // These status labels appear both as stat-card <p> labels AND as StatusBadge <span> elements.
     // Use getAllByText and filter by tagName to find the stat-card label specifically.
     const normalStat = screen.getAllByText('Normal').find((el) => el.tagName === 'P');
     expect(normalStat).toBeDefined();
-    const waspadaStat = screen.getAllByText('Waspada').find((el) => el.tagName === 'P');
-    expect(waspadaStat).toBeDefined();
-    const daruratStat = screen.getAllByText('Darurat').find((el) => el.tagName === 'P');
-    expect(daruratStat).toBeDefined();
+    const perluPemeriksaanStat = screen.getAllByText('Perlu Pemeriksaan').find((el) => el.tagName === 'P');
+    expect(perluPemeriksaanStat).toBeDefined();
+    expect(screen.getByText('Tanpa Data')).toBeInTheDocument();
   });
 
   it('renders stat card values', () => {
     renderWithProviders(<Dashboard />);
     expect(screen.getByText('25')).toBeInTheDocument();
     expect(screen.getByText('15')).toBeInTheDocument();
-    expect(screen.getByText('7')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('10')).toBeInTheDocument();
+    expect(screen.getByText('0')).toBeInTheDocument();
   });
 
   it('renders average BPM and SpO₂ cards', () => {

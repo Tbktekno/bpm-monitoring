@@ -8,8 +8,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 
 // The StatusBadge uses STATUS_COLORS from @/constants which has:
 //   Normal → bg-success-50, text-success-600, dot bg-success-500
-//   Waspada → bg-warning-50, text-warning-600, dot bg-warning-500
-//   Darurat → bg-danger-50, text-danger-600, dot bg-danger-500
+//   Perlu Pemeriksaan → bg-warning-50, text-warning-600, dot bg-warning-500
 
 describe('StatusBadge', () => {
   it('renders with the status text', () => {
@@ -17,14 +16,19 @@ describe('StatusBadge', () => {
     expect(screen.getByText('Normal')).toBeInTheDocument();
   });
 
-  it('renders Waspada status', () => {
+  it('renders Waspada as Perlu Pemeriksaan', () => {
     render(<StatusBadge status="Waspada" />);
-    expect(screen.getByText('Waspada')).toBeInTheDocument();
+    expect(screen.getByText('Perlu Pemeriksaan')).toBeInTheDocument();
   });
 
-  it('renders Darurat status', () => {
+  it('renders Darurat as Perlu Pemeriksaan', () => {
     render(<StatusBadge status="Darurat" />);
-    expect(screen.getByText('Darurat')).toBeInTheDocument();
+    expect(screen.getByText('Perlu Pemeriksaan')).toBeInTheDocument();
+  });
+
+  it('renders PERLU_PEMERIKSAAN status', () => {
+    render(<StatusBadge status="PERLU_PEMERIKSAAN" />);
+    expect(screen.getByText('Perlu Pemeriksaan')).toBeInTheDocument();
   });
 
   it('applies success color classes for Normal status', () => {
@@ -34,18 +38,11 @@ describe('StatusBadge', () => {
     expect(badge.className).toContain('text-success-600');
   });
 
-  it('applies warning color classes for Waspada status', () => {
+  it('applies warning color classes for Perlu Pemeriksaan status', () => {
     render(<StatusBadge status="Waspada" />);
-    const badge = screen.getByText('Waspada');
+    const badge = screen.getByText('Perlu Pemeriksaan');
     expect(badge.className).toContain('bg-warning-50');
     expect(badge.className).toContain('text-warning-600');
-  });
-
-  it('applies danger color classes for Darurat status', () => {
-    render(<StatusBadge status="Darurat" />);
-    const badge = screen.getByText('Darurat');
-    expect(badge.className).toContain('bg-danger-50');
-    expect(badge.className).toContain('text-danger-600');
   });
 
   it('uses sm size classes when size="sm"', () => {
@@ -93,8 +90,13 @@ describe('StatusBadge', () => {
       expect(screen.getByText('Dugaan Takikardia')).toBeInTheDocument();
     });
 
-    it('classifies SpO2 < 95% for any BPM as Dugaan Hipoksemia', () => {
+    it('classifies SpO2 90-94% for any BPM as Penurunan Saturasi Oksigen', () => {
       render(<StatusBadge bpm={75} spo2={90} />);
+      expect(screen.getByText('Penurunan Saturasi Oksigen')).toBeInTheDocument();
+    });
+
+    it('classifies SpO2 < 90% for any BPM as Dugaan Hipoksemia', () => {
+      render(<StatusBadge bpm={75} spo2={88} />);
       expect(screen.getByText('Dugaan Hipoksemia')).toBeInTheDocument();
     });
   });

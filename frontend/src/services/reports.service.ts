@@ -105,25 +105,6 @@ export const reportsService = {
     return response.data;
   },
 
-  async exportExcel(params: ReportParams & { type: 'harian' | 'bulanan' }): Promise<Blob> {
-    // Convert frontend params to backend format
-    const backendParams: Record<string, string> = {};
-    if (params.date) {
-      backendParams.startDate = params.date;
-      backendParams.endDate = params.date;
-    } else if (params.month) {
-      const [year, month] = params.month.split('-');
-      backendParams.startDate = `${params.month}-01`;
-      const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
-      backendParams.endDate = `${params.month}-${String(lastDay).padStart(2, '0')}`;
-    }
-    const response = await api.get('/reports/export/excel', {
-      params: backendParams,
-      responseType: 'blob',
-    });
-    return response.data;
-  },
-
   downloadBlob(blob: Blob, filename: string) {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');

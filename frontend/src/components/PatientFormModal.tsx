@@ -21,8 +21,6 @@ const patientSchema = z.object({
   bloodType: z.string().min(1, 'Golongan darah wajib dipilih'),
   height: z.coerce.number().min(1, 'Tinggi badan wajib diisi').positive('Tinggi badan harus positif'),
   weight: z.coerce.number().min(1, 'Berat badan wajib diisi').positive('Berat badan harus positif'),
-  medicalHistory: z.string().optional(),
-  doctorNote: z.string().optional(),
 });
 
 interface PatientFormModalProps {
@@ -60,8 +58,6 @@ export function PatientFormModal({ isOpen, onClose, patient }: PatientFormModalP
           bloodType: patient.bloodType,
           height: patient.height,
           weight: patient.weight,
-          medicalHistory: patient.medicalHistory || '',
-          doctorNote: patient.doctorNote || '',
         });
       } else {
         reset({
@@ -75,8 +71,6 @@ export function PatientFormModal({ isOpen, onClose, patient }: PatientFormModalP
           bloodType: '',
           height: undefined,
           weight: undefined,
-          medicalHistory: '',
-          doctorNote: '',
         });
       }
     }
@@ -94,11 +88,11 @@ export function PatientFormModal({ isOpen, onClose, patient }: PatientFormModalP
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit Pasien' : 'Tambah Pasien Baru'} size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit Responden' : 'Tambah Responden Baru'} size="lg">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Input
-            label="ID Pasien (opsional)"
+            label="ID Responden (opsional)"
             placeholder="Otomatis jika dikosongkan"
             error={errors.patientId?.message}
             {...register('patientId')}
@@ -164,30 +158,6 @@ export function PatientFormModal({ isOpen, onClose, patient }: PatientFormModalP
           error={errors.address?.message}
           {...register('address')}
         />
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">Riwayat Medis</label>
-          <textarea
-            className="input-field min-h-[80px] resize-y"
-            placeholder="Riwayat medis pasien (opsional)"
-            {...register('medicalHistory')}
-          />
-          {errors.medicalHistory && (
-            <p className="text-sm text-danger-500 mt-1">{errors.medicalHistory.message}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">Catatan Dokter</label>
-          <textarea
-            className="input-field min-h-[80px] resize-y"
-            placeholder="Catatan dokter (opsional)"
-            {...register('doctorNote')}
-          />
-          {errors.doctorNote && (
-            <p className="text-sm text-danger-500 mt-1">{errors.doctorNote.message}</p>
-          )}
-        </div>
 
         <div className="flex items-center justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>

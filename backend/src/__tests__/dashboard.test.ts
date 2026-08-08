@@ -139,11 +139,10 @@ describe('getDashboard', () => {
     expect(data).toHaveProperty('statusDistribution');
     expect(data.statusDistribution).toMatchObject({
       normal: 2,
-      waspada: 1,
-      darurat: 1,
+      perluPemeriksaan: 2,
     });
     expect(data.statusDistribution).toHaveProperty('tanpaData');
-    // totalPatients 5 - (2+1+1) = 1
+    // totalPatients 5 - (2+2) = 1
     expect(data.statusDistribution.tanpaData).toBe(1);
 
     // Averages (new shape: totalReadings + range instead of totalReadings24h)
@@ -188,8 +187,7 @@ describe('getDashboard', () => {
     expect(callArg.totalPatients).toBe(0);
     expect(callArg.statusDistribution).toMatchObject({
       normal: 0,
-      waspada: 0,
-      darurat: 0,
+      perluPemeriksaan: 0,
     });
     expect(callArg.statusDistribution).toHaveProperty('tanpaData', 0);
     expect(callArg.averages.avgBpm).toBe(0);

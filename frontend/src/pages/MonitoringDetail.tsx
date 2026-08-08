@@ -102,7 +102,7 @@ export default function MonitoringDetail() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-slate-900">
-              {patient?.name || 'Pasien'}
+              {patient?.name || 'Responden'}
             </h1>
             <p className="text-sm text-slate-400 mt-1">ID: {patient?.patientId || patientId}</p>
           </div>

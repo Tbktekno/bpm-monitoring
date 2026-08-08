@@ -36,13 +36,11 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
       : [];
 
     let normalCount = 0;
-    let waspadaCount = 0;
-    let daruratCount = 0;
+    let perluPemeriksaanCount = 0;
 
     for (const r of latestStatuses) {
       if (r.status === 'NORMAL') normalCount++;
-      else if (r.status === 'WASPADA') waspadaCount++;
-      else if (r.status === 'DARURAT') daruratCount++;
+      else perluPemeriksaanCount++;
     }
 
     // ─── Average BPM and SpO₂ from recent readings ──────────────────────────
@@ -142,9 +140,8 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
         totalPatients,
         statusDistribution: {
           normal: normalCount,
-          waspada: waspadaCount,
-          darurat: daruratCount,
-          tanpaData: totalPatients - normalCount - waspadaCount - daruratCount,
+          perluPemeriksaan: perluPemeriksaanCount,
+          tanpaData: totalPatients - normalCount - perluPemeriksaanCount,
         },
         averages: {
           avgBpm: averages.avgBpm,

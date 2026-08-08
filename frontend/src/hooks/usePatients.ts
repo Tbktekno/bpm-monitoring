@@ -25,10 +25,10 @@ export function useCreatePatient() {
     mutationFn: (data: PatientFormData) => patientsService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
-      toast.success('Pasien berhasil ditambahkan');
+      toast.success('Responden berhasil ditambahkan');
     },
     onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Gagal menambahkan pasien';
+      const message = error instanceof Error ? error.message : 'Gagal menambahkan responden';
       toast.error(message);
     },
   });
@@ -42,10 +42,10 @@ export function useUpdatePatient(id: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       queryClient.invalidateQueries({ queryKey: ['patient', id] });
-      toast.success('Data pasien berhasil diperbarui');
+      toast.success('Data responden berhasil diperbarui');
     },
     onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Gagal memperbarui data pasien';
+      const message = error instanceof Error ? error.message : 'Gagal memperbarui data responden';
       toast.error(message);
     },
   });
@@ -58,10 +58,10 @@ export function useDeletePatient() {
     mutationFn: (id: string) => patientsService.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
-      toast.success('Pasien berhasil dihapus');
+      toast.success('Responden berhasil dihapus');
     },
     onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Gagal menghapus pasien';
+      const message = error instanceof Error ? error.message : 'Gagal menghapus responden';
       toast.error(message);
     },
   });

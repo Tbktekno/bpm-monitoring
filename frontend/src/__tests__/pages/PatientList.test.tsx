@@ -96,13 +96,13 @@ describe('PatientList Page', () => {
 
   it('renders the page title', () => {
     renderWithProviders(<PatientList />);
-    expect(screen.getByText('Data Pasien')).toBeInTheDocument();
-    expect(screen.getByText('Kelola data pasien')).toBeInTheDocument();
+    expect(screen.getByText('Data Responden')).toBeInTheDocument();
+    expect(screen.getByText('Kelola data responden')).toBeInTheDocument();
   });
 
-  it('renders the "Tambah Pasien" button', () => {
+  it('renders the "Tambah Responden" button', () => {
     renderWithProviders(<PatientList />);
-    expect(screen.getByText('Tambah Pasien')).toBeInTheDocument();
+    expect(screen.getByText('Tambah Responden')).toBeInTheDocument();
   });
 
   it('renders search input', () => {

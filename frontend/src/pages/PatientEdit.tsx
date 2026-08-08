@@ -24,8 +24,6 @@ const patientSchema = z.object({
   bloodType: z.string().min(1, 'Golongan darah wajib dipilih'),
   height: z.coerce.number().min(1, 'Tinggi badan wajib diisi').positive('Tinggi badan harus positif'),
   weight: z.coerce.number().min(1, 'Berat badan wajib diisi').positive('Berat badan harus positif'),
-  medicalHistory: z.string().optional(),
-  doctorNote: z.string().optional(),
 });
 
 export default function PatientEdit() {
@@ -56,8 +54,6 @@ export default function PatientEdit() {
         bloodType: patient.bloodType,
         height: patient.height,
         weight: patient.weight,
-        medicalHistory: patient.medicalHistory || '',
-        doctorNote: patient.doctorNote || '',
       });
     }
   }, [patient, reset]);
@@ -78,21 +74,21 @@ export default function PatientEdit() {
   }
 
   if (error || !patient) {
-    return <ErrorState message="Pasien tidak ditemukan" onRetry={() => refetch()} />;
+    return <ErrorState message="Responden tidak ditemukan" onRetry={() => refetch()} />;
   }
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Edit Pasien</h1>
-        <p className="text-sm text-slate-400 mt-1">Edit data pasien: {patient.name}</p>
+        <h1 className="text-xl font-bold text-slate-900">Edit Responden</h1>
+        <p className="text-sm text-slate-400 mt-1">Edit data responden: {patient.name}</p>
       </div>
 
       <Card>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <Input
-              label="ID Pasien"
+              label="ID Responden"
               placeholder="Otomatis"
               error={errors.patientId?.message}
               {...register('patientId')}
@@ -158,30 +154,6 @@ export default function PatientEdit() {
             error={errors.address?.message}
             {...register('address')}
           />
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Riwayat Medis</label>
-            <textarea
-              className="input-field min-h-[100px] resize-y"
-              placeholder="Riwayat medis pasien (opsional)"
-              {...register('medicalHistory')}
-            />
-            {errors.medicalHistory && (
-              <p className="text-sm text-danger-500 mt-1">{errors.medicalHistory.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Catatan Dokter</label>
-            <textarea
-              className="input-field min-h-[100px] resize-y"
-              placeholder="Catatan dokter (opsional)"
-              {...register('doctorNote')}
-            />
-            {errors.doctorNote && (
-              <p className="text-sm text-danger-500 mt-1">{errors.doctorNote.message}</p>
-            )}
-          </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">
             <Button type="button" variant="secondary" onClick={() => navigate(`/patients/${id}`)}>

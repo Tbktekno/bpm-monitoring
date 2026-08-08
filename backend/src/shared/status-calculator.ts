@@ -37,32 +37,25 @@ export function calculateSpo2Status(spo2: number): string {
 /**
  * Composite (overall) status derived from BPM + SpO₂:
  *
- *   NORMAL  ← both BPM and SpO₂ are NORMAL
- *   DARURAT ← bradycardia / severe tachycardia / moderate-to-severe hypoxemia
- *   WASPADA ← everything else (one or both are mildly abnormal)
+ *   NORMAL              ← both BPM and SpO₂ are within normal range
+ *   PERLU_PEMERIKSAAN   ← one or both are outside the normal range
  */
 export function calculateCompositeStatus(bpmStatus: string, spo2Status: string): string {
   if (bpmStatus === 'NORMAL' && spo2Status === 'NORMAL') return 'NORMAL';
-  if (
-    bpmStatus === 'BRADICARDIA' ||
-    bpmStatus === 'TACHY_BERAT' ||
-    spo2Status === 'HIPOKSEMIA_SEDANG' ||
-    spo2Status === 'HIPOKSEMIA_BERAT'
-  ) {
-    return 'DARURAT';
-  }
-  return 'WASPADA';
+  return 'PERLU_PEMERIKSAAN';
 }
 
 /**
  * Disease classification based on BPM & SpO₂ matrix:
- *   SpO₂ < 95%             → Dugaan Hipoksemia (Semua nilai BPM)
- *   SpO₂ 95-100% & <60 BPM → Dugaan Bradikardia
- *   SpO₂ 95-100% & >100 BPM→ Dugaan Takikardia
- *   SpO₂ 95-100% & 60-100  → Normal
+ *   SpO₂ < 90%          → Dugaan Hipoksemia (Semua nilai BPM)
+ *   SpO₂ 90-94%         → Penurunan Saturasi Oksigen
+ *   SpO₂ >= 95% & <60   → Dugaan Bradikardia
+ *   SpO₂ >= 95% & >100  → Dugaan Takikardia
+ *   SpO₂ >= 95% & 60-100→ Normal
  */
 export function calculateDiseaseClassification(bpm: number, spo2: number): string {
-  if (spo2 < 95) return 'Dugaan Hipoksemia';
+  if (spo2 < 90) return 'Dugaan Hipoksemia';
+  if (spo2 < 95) return 'Penurunan Saturasi Oksigen';
   if (bpm < 60) return 'Dugaan Bradikardia';
   if (bpm > 100) return 'Dugaan Takikardia';
   return 'Normal';

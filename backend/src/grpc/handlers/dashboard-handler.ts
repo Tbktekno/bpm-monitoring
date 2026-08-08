@@ -95,12 +95,10 @@ export function createDashboardHandlers(prisma: PrismaClient) {
         const normalCount = statusDistribution
           .find((s) => s.status === 'NORMAL')
           ?._count?.status ?? 0;
-        const waspadaCount = statusDistribution
-          .find((s) => s.status === 'WASPADA')
-          ?._count?.status ?? 0;
-        const daruratCount = statusDistribution
-          .find((s) => s.status === 'DARURAT')
-          ?._count?.status ?? 0;
+        // Everything outside normal range is reported as "perlu pemeriksaan"
+        const perluPemeriksaanCount = statusDistribution
+          .filter((s) => s.status !== 'NORMAL')
+          .reduce((sum, s) => sum + (s._count?.status ?? 0), 0);
 
         // ── Build response ────────────────────────────────────────────────
         callback(null, {
@@ -108,8 +106,8 @@ export function createDashboardHandlers(prisma: PrismaClient) {
           active_sessions: activeSessions,
           readings_today: readingsToday,
           normal_readings: normalCount,
-          waspada_readings: waspadaCount,
-          darurat_readings: daruratCount,
+          waspada_readings: perluPemeriksaanCount,
+          darurat_readings: 0,
           avg_bpm: Math.round((avgResult._avg.bpm ?? 0) * 100) / 100,
           avg_spo2: Math.round((avgResult._avg.spo2 ?? 0) * 100) / 100,
           recent_readings: recentReadings.map((r) => ({

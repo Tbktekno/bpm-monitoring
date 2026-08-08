@@ -90,8 +90,6 @@ const mockPatient = {
   bloodType: 'O',
   height: 175,
   weight: 70,
-  medicalHistory: null,
-  doctorNote: null,
   status: 'Normal',
   createdAt: new Date(),
   updatedAt: new Date(),

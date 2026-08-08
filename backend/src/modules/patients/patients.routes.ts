@@ -30,7 +30,7 @@ router.get('/:id', getPatient);
 
 /**
  * POST /api/v1/patients
- * Body: { name, nik?, gender, birthDate, address?, phone?, bloodType?, height?, weight?, medicalHistory?, doctorNote? }
+ * Body: { name, nik?, gender, birthDate, address?, phone?, bloodType?, height?, weight? }
  */
 router.post('/', createPatient);
 

@@ -7,7 +7,6 @@ import {
   getDailyReport,
   getMonthlyReport,
   exportPdf,
-  exportExcel,
   exportSessionPdf,
 } from './reports.controller';
 import { authenticate } from '../../server/middleware/auth';
@@ -34,12 +33,6 @@ router.get('/monthly', getMonthlyReport);
  * Query: type, startDate, endDate
  */
 router.get('/export/pdf', exportPdf);
-
-/**
- * GET /api/v1/reports/export/excel
- * Query: startDate, endDate
- */
-router.get('/export/excel', exportExcel);
 
 /**
  * GET /api/v1/reports/export/session-pdf

@@ -147,7 +147,7 @@ export default function Reports() {
           </div>
           <div className="bg-amber-50 rounded-2xl p-4 text-center">
             <p className="text-2xl font-bold text-amber-600">{stats.uniquePatients}</p>
-            <p className="text-xs text-slate-500 mt-0.5">Pasien</p>
+            <p className="text-xs text-slate-500 mt-0.5">Responden</p>
           </div>
         </div>
       )}
@@ -157,8 +157,8 @@ export default function Reports() {
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <Select
-              label="Filter Pasien"
-              placeholder="Semua Pasien"
+              label="Filter Responden"
+              placeholder="Semua Responden"
               options={patientOptions}
               value={filterPatient}
               onChange={(e) => setFilterPatient(e.target.value)}
@@ -194,7 +194,7 @@ export default function Reports() {
           <div className="py-16 text-center text-slate-400">
             <IoPulseOutline className="w-16 h-16 mx-auto mb-4 opacity-50" />
             <p className="text-lg font-medium">Belum ada sesi monitoring</p>
-            <p className="text-sm mt-1">Lakukan monitoring pasien terlebih dahulu</p>
+            <p className="text-sm mt-1">Lakukan monitoring responden terlebih dahulu</p>
           </div>
         </Card>
       ) : (
@@ -206,7 +206,7 @@ export default function Reports() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="text-base font-bold text-slate-900 truncate">
-                      {s.patient?.name || `Pasien #${s.patientId}`}
+                      {s.patient?.name || `Responden #${s.patientId}`}
                     </h3>
                     <StatusBadge status={s.status === 'COMPLETED' ? 'NORMAL' : 'WASPADA'} size="sm" />
                   </div>

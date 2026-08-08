@@ -44,7 +44,7 @@ export const monitoringService = {
     return response.data.data;
   },
 
-  /** Memulai sesi monitoring baru untuk pasien + device */
+  /** Memulai sesi monitoring baru untuk responden + device */
   async startSession(patientId: number, deviceId?: string): Promise<SessionData> {
     const response = await api.post<ApiResponse<SessionData>>('/monitoring/session/start', { patientId, deviceId });
     return response.data.data;

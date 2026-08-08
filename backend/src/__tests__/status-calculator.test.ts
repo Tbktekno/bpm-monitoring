@@ -80,33 +80,33 @@ describe('calculateCompositeStatus', () => {
     expect(calculateCompositeStatus('NORMAL', 'NORMAL')).toBe('NORMAL');
   });
 
-  it('returns DARURAT when BPM is BRADICARDIA', () => {
-    expect(calculateCompositeStatus('BRADICARDIA', 'NORMAL')).toBe('DARURAT');
-    expect(calculateCompositeStatus('BRADICARDIA', 'HIPOKSEMIA_RINGAN')).toBe('DARURAT');
+  it('returns PERLU_PEMERIKSAAN when BPM is BRADICARDIA', () => {
+    expect(calculateCompositeStatus('BRADICARDIA', 'NORMAL')).toBe('PERLU_PEMERIKSAAN');
+    expect(calculateCompositeStatus('BRADICARDIA', 'HIPOKSEMIA_RINGAN')).toBe('PERLU_PEMERIKSAAN');
   });
 
-  it('returns DARURAT when BPM is TACHY_BERAT', () => {
-    expect(calculateCompositeStatus('TACHY_BERAT', 'NORMAL')).toBe('DARURAT');
-    expect(calculateCompositeStatus('TACHY_BERAT', 'HIPOKSEMIA_RINGAN')).toBe('DARURAT');
+  it('returns PERLU_PEMERIKSAAN when BPM is TACHY_BERAT', () => {
+    expect(calculateCompositeStatus('TACHY_BERAT', 'NORMAL')).toBe('PERLU_PEMERIKSAAN');
+    expect(calculateCompositeStatus('TACHY_BERAT', 'HIPOKSEMIA_RINGAN')).toBe('PERLU_PEMERIKSAAN');
   });
 
-  it('returns DARURAT when SpO₂ is HIPOKSEMIA_SEDANG', () => {
-    expect(calculateCompositeStatus('NORMAL', 'HIPOKSEMIA_SEDANG')).toBe('DARURAT');
-    expect(calculateCompositeStatus('TACHY_RINGAN', 'HIPOKSEMIA_SEDANG')).toBe('DARURAT');
+  it('returns PERLU_PEMERIKSAAN when SpO₂ is HIPOKSEMIA_SEDANG', () => {
+    expect(calculateCompositeStatus('NORMAL', 'HIPOKSEMIA_SEDANG')).toBe('PERLU_PEMERIKSAAN');
+    expect(calculateCompositeStatus('TACHY_RINGAN', 'HIPOKSEMIA_SEDANG')).toBe('PERLU_PEMERIKSAAN');
   });
 
-  it('returns DARURAT when SpO₂ is HIPOKSEMIA_BERAT', () => {
-    expect(calculateCompositeStatus('NORMAL', 'HIPOKSEMIA_BERAT')).toBe('DARURAT');
-    expect(calculateCompositeStatus('TACHY_RINGAN', 'HIPOKSEMIA_BERAT')).toBe('DARURAT');
+  it('returns PERLU_PEMERIKSAAN when SpO₂ is HIPOKSEMIA_BERAT', () => {
+    expect(calculateCompositeStatus('NORMAL', 'HIPOKSEMIA_BERAT')).toBe('PERLU_PEMERIKSAAN');
+    expect(calculateCompositeStatus('TACHY_RINGAN', 'HIPOKSEMIA_BERAT')).toBe('PERLU_PEMERIKSAAN');
   });
 
-  it('returns WASPADA when one or both are mildly abnormal', () => {
+  it('returns PERLU_PEMERIKSAAN when one or both are outside normal range', () => {
     // Tachy ringan with normal SpO₂
-    expect(calculateCompositeStatus('TACHY_RINGAN', 'NORMAL')).toBe('WASPADA');
+    expect(calculateCompositeStatus('TACHY_RINGAN', 'NORMAL')).toBe('PERLU_PEMERIKSAAN');
     // Normal BPM with mild hypoxemia
-    expect(calculateCompositeStatus('NORMAL', 'HIPOKSEMIA_RINGAN')).toBe('WASPADA');
+    expect(calculateCompositeStatus('NORMAL', 'HIPOKSEMIA_RINGAN')).toBe('PERLU_PEMERIKSAAN');
     // Both mildly abnormal
-    expect(calculateCompositeStatus('TACHY_RINGAN', 'HIPOKSEMIA_RINGAN')).toBe('WASPADA');
+    expect(calculateCompositeStatus('TACHY_RINGAN', 'HIPOKSEMIA_RINGAN')).toBe('PERLU_PEMERIKSAAN');
   });
 });
 
@@ -128,21 +128,21 @@ describe('calculateStatuses', () => {
     const result = calculateStatuses(55, 97);
     expect(result.bpmStatus).toBe('BRADICARDIA');
     expect(result.spo2Status).toBe('NORMAL');
-    expect(result.status).toBe('DARURAT');
+    expect(result.status).toBe('PERLU_PEMERIKSAAN');
   });
 
   it('returns correct statuses for severe tachycardia + severe hypoxemia', () => {
     const result = calculateStatuses(130, 80);
     expect(result.bpmStatus).toBe('TACHY_BERAT');
     expect(result.spo2Status).toBe('HIPOKSEMIA_BERAT');
-    expect(result.status).toBe('DARURAT');
+    expect(result.status).toBe('PERLU_PEMERIKSAAN');
   });
 
   it('returns correct statuses for mild tachycardia + mild hypoxemia', () => {
     const result = calculateStatuses(110, 92);
     expect(result.bpmStatus).toBe('TACHY_RINGAN');
     expect(result.spo2Status).toBe('HIPOKSEMIA_RINGAN');
-    expect(result.status).toBe('WASPADA');
+    expect(result.status).toBe('PERLU_PEMERIKSAAN');
   });
 });
 
@@ -210,9 +210,15 @@ describe('boundary values', () => {
       expect(calculateDiseaseClassification(140, 100)).toBe('Dugaan Takikardia');
     });
 
-    it('classifies SpO2 < 95% for any BPM as Dugaan Hipoksemia', () => {
-      expect(calculateDiseaseClassification(75, 94)).toBe('Dugaan Hipoksemia');
-      expect(calculateDiseaseClassification(50, 90)).toBe('Dugaan Hipoksemia');
+    it('classifies SpO2 90-94% for any BPM as Penurunan Saturasi Oksigen', () => {
+      expect(calculateDiseaseClassification(75, 94)).toBe('Penurunan Saturasi Oksigen');
+      expect(calculateDiseaseClassification(50, 90)).toBe('Penurunan Saturasi Oksigen');
+      expect(calculateDiseaseClassification(130, 92)).toBe('Penurunan Saturasi Oksigen');
+    });
+
+    it('classifies SpO2 < 90% for any BPM as Dugaan Hipoksemia', () => {
+      expect(calculateDiseaseClassification(75, 89)).toBe('Dugaan Hipoksemia');
+      expect(calculateDiseaseClassification(50, 88)).toBe('Dugaan Hipoksemia');
       expect(calculateDiseaseClassification(130, 85)).toBe('Dugaan Hipoksemia');
     });
   });

@@ -218,7 +218,7 @@ export async function createPatient(req: Request, res: Response, next: NextFunct
 
     const {
       name, nik, gender, birthDate, address, phone,
-      bloodType, height, weight, medicalHistory, doctorNote,
+      bloodType, height, weight,
     } = req.body;
 
     const parsedBirthDate = new Date(birthDate);
@@ -247,8 +247,6 @@ export async function createPatient(req: Request, res: Response, next: NextFunct
         bloodType: bloodType || null,
         height: height ? parseFloat(height) : null,
         weight: weight ? parseFloat(weight) : null,
-        medicalHistory: medicalHistory || null,
-        doctorNote: doctorNote || null,
       },
     });
 
@@ -298,7 +296,7 @@ export async function updatePatient(req: Request, res: Response, next: NextFunct
 
     const {
       name, nik, gender, birthDate, address, phone,
-      bloodType, height, weight, medicalHistory, doctorNote,
+      bloodType, height, weight,
     } = req.body;
 
     const data: any = {};
@@ -323,8 +321,6 @@ export async function updatePatient(req: Request, res: Response, next: NextFunct
     if (bloodType !== undefined) data.bloodType = bloodType || null;
     if (height !== undefined) data.height = height ? parseFloat(height) : null;
     if (weight !== undefined) data.weight = weight ? parseFloat(weight) : null;
-    if (medicalHistory !== undefined) data.medicalHistory = medicalHistory || null;
-    if (doctorNote !== undefined) data.doctorNote = doctorNote || null;
 
     const patient = await prisma.patient.update({
       where: { id },

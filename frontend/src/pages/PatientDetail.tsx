@@ -89,7 +89,7 @@ export default function PatientDetail() {
   }
 
   if (error || !patient) {
-    return <ErrorState message="Pasien tidak ditemukan" onRetry={() => refetch()} />;
+    return <ErrorState message="Responden tidak ditemukan" onRetry={() => refetch()} />;
   }
 
   const age = differenceInYears(new Date(), parseISO(patient.birthDate));
@@ -149,12 +149,6 @@ export default function PatientDetail() {
           <InfoItem label="Golongan Darah" value={patient.bloodType} />
           <InfoItem label="Tinggi Badan" value={`${patient.height} cm`} />
           <InfoItem label="Berat Badan" value={`${patient.weight} kg`} />
-          {patient.medicalHistory && (
-            <InfoItem label="Riwayat Medis" value={patient.medicalHistory} span />
-          )}
-          {patient.doctorNote && (
-            <InfoItem label="Catatan Dokter" value={patient.doctorNote} span />
-          )}
         </div>
       </Card>
 
@@ -219,7 +213,7 @@ export default function PatientDetail() {
         isOpen={showDelete}
         onClose={() => setShowDelete(false)}
         onConfirm={handleDelete}
-        title="Hapus Pasien"
+        title="Hapus Responden"
         message={`Apakah Anda yakin ingin menghapus ${patient.name}? Semua data monitoring akan ikut terhapus.`}
         confirmLabel="Hapus"
         variant="danger"

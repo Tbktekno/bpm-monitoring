@@ -221,7 +221,7 @@ export default function Monitoring() {
       <div>
         <h1 className="text-xl font-bold text-slate-900">Monitoring Real-time</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Pilih pasien, mulai sesi monitoring, dan lihat data BPM & SpO₂ langsung
+          Pilih responden, mulai sesi monitoring, dan lihat data BPM & SpO₂ langsung
         </p>
       </div>
 
@@ -230,8 +230,8 @@ export default function Monitoring() {
         <div className="flex flex-col sm:flex-row gap-4 items-end">
           <div className="flex-1">
             <Select
-              label="Pilih Pasien"
-              placeholder="— Pilih pasien —"
+              label="Pilih Responden"
+              placeholder="— Pilih responden —"
               options={patientOptions}
               value={selectedPatientId}
               onChange={handlePatientChange}
@@ -274,10 +274,10 @@ export default function Monitoring() {
         </div>
 
         {loadingPatients && (
-          <p className="mt-2 text-sm text-slate-400">Memuat data pasien...</p>
+          <p className="mt-2 text-sm text-slate-400">Memuat data responden...</p>
         )}
         {patientsError && (
-          <p className="mt-2 text-sm text-danger-500">Gagal memuat daftar pasien.</p>
+          <p className="mt-2 text-sm text-danger-500">Gagal memuat daftar responden.</p>
         )}
       </Card>
 
@@ -289,11 +289,11 @@ export default function Monitoring() {
               🔴 Sesi Monitoring Sedang Berlangsung
             </p>
             <p className="text-xs text-success-600 mt-0.5">
-              Data dari ESP32 akan otomatis tercatat ke pasien ini
+              Data dari ESP32 akan otomatis tercatat ke responden ini
             </p>
           </div>
           <span className="text-xs text-success-600 font-mono bg-white px-2 py-1 rounded">
-            {activeSession.patient?.name || `Pasien #${activeSession.patientId}`}
+            {activeSession.patient?.name || `Responden #${activeSession.patientId}`}
           </span>
         </div>
       )}
@@ -306,8 +306,8 @@ export default function Monitoring() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                 d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
             </svg>
-            <p className="text-lg font-medium">Pilih Pasien untuk Memulai</p>
-            <p className="text-sm mt-1">Gunakan dropdown di atas untuk memilih pasien</p>
+            <p className="text-lg font-medium">Pilih Responden untuk Memulai</p>
+            <p className="text-sm mt-1">Gunakan dropdown di atas untuk memilih responden</p>
           </div>
         </Card>
       )}
@@ -440,7 +440,7 @@ export default function Monitoring() {
           <div className="space-y-4">
             <div className="text-center pb-2">
               <p className="text-lg font-bold text-slate-900">
-                {sessionResult.patient?.name || `Pasien #${sessionResult.patientId}`}
+                {sessionResult.patient?.name || `Responden #${sessionResult.patientId}`}
               </p>
               <p className="text-sm text-slate-400">
                 ID: {sessionResult.patient?.patientId || '-'}
@@ -527,7 +527,7 @@ function CompletedSessions() {
             >
               <div className="flex-1">
                 <p className="text-sm font-medium text-slate-800">
-                  {s.patient?.name || `Pasien #${s.patientId}`}
+                  {s.patient?.name || `Responden #${s.patientId}`}
                 </p>
                 <p className="text-xs text-slate-400">
                   {formatDate(s.startTime)}

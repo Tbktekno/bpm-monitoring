@@ -100,15 +100,15 @@ export default function PatientList() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Data Pasien</h1>
-          <p className="text-sm text-slate-400 mt-1">Kelola data pasien</p>
+          <h1 className="text-xl font-bold text-slate-900">Data Responden</h1>
+          <p className="text-sm text-slate-400 mt-1">Kelola data responden</p>
         </div>
         <Button
           variant="primary"
           icon={<IoPersonAddOutline />}
           onClick={() => setShowCreateModal(true)}
         >
-          Tambah Pasien
+          Tambah Responden
         </Button>
       </div>
 
@@ -131,7 +131,7 @@ export default function PatientList() {
           error={error || null}
           onRetry={() => refetch()}
           onRowClick={(p) => navigate(`/patients/${p.id}`)}
-          emptyMessage={search ? 'Tidak ada pasien yang sesuai dengan pencarian' : 'Belum ada data pasien'}
+          emptyMessage={search ? 'Tidak ada responden yang sesuai dengan pencarian' : 'Belum ada data responden'}
           cardless
         />
         {paginationInfo && (
@@ -156,8 +156,8 @@ export default function PatientList() {
         isOpen={!!deleteId}
         onClose={() => setDeleteId(null)}
         onConfirm={handleDelete}
-        title="Hapus Pasien"
-        message="Apakah Anda yakin ingin menghapus pasien ini? Tindakan ini tidak dapat dibatalkan."
+        title="Hapus Responden"
+        message="Apakah Anda yakin ingin menghapus responden ini? Tindakan ini tidak dapat dibatalkan."
         confirmLabel="Hapus"
         variant="danger"
         isLoading={deleteMutation.isPending}

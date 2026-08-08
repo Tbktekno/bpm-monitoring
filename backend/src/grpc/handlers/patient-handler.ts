@@ -45,8 +45,6 @@ function formatPatient(p: any) {
     blood_type: p.bloodType ?? '',
     height: p.height ?? 0,
     weight: p.weight ?? 0,
-    medical_history: p.medicalHistory ?? '',
-    doctor_note: p.doctorNote ?? '',
     created_at: p.createdAt instanceof Date
       ? p.createdAt.toISOString()
       : String(p.createdAt ?? ''),
@@ -189,8 +187,6 @@ export function createPatientHandlers(prisma: PrismaClient) {
             bloodType: req.blood_type || undefined,
             height: req.height || undefined,
             weight: req.weight || undefined,
-            medicalHistory: req.medical_history || undefined,
-            doctorNote: req.doctor_note || undefined,
           },
         });
 
@@ -277,12 +273,6 @@ export function createPatientHandlers(prisma: PrismaClient) {
         }
         if (req.weight !== undefined) {
           updateData.weight = req.weight || null;
-        }
-        if (req.medical_history !== undefined) {
-          updateData.medicalHistory = req.medical_history || null;
-        }
-        if (req.doctor_note !== undefined) {
-          updateData.doctorNote = req.doctor_note || null;
         }
 
         const patient = await prisma.patient.update({

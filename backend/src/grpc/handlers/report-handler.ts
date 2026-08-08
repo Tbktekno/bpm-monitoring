@@ -36,7 +36,7 @@ function buildReportResponse(
   // Unique patients
   const uniquePatients = new Set(readings.map((r) => r.patientId)).size;
 
-  // Status counts
+  // Status counts (NORMAL vs perlu pemeriksaan — includes legacy WASPADA/DARURAT)
   const statusCounts: Record<string, number> = { NORMAL: 0, WASPADA: 0, DARURAT: 0 };
   const bpmCounts: Record<string, number> = {};
   const spo2Counts: Record<string, number> = {};
@@ -50,9 +50,8 @@ function buildReportResponse(
 
   for (const r of readings) {
     // Status
-    if (statusCounts[r.status] !== undefined) {
-      statusCounts[r.status]++;
-    }
+    if (r.status === 'NORMAL') statusCounts.NORMAL++;
+    else statusCounts.WASPADA++;
 
     // BPM distribution
     bpmCounts[r.bpmStatus] = (bpmCounts[r.bpmStatus] ?? 0) + 1;

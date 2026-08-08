@@ -482,8 +482,22 @@ export async function getHistory(req: Request, res: Response, next: NextFunction
     }
 
     // Status filters
-    if (status && ['NORMAL', 'WASPADA', 'DARURAT'].includes(status)) {
-      where.status = status;
+    const statusLookup: Record<string, string> = {
+      'NORMAL': 'NORMAL',
+      'Normal': 'NORMAL',
+      'PERLU_PEMERIKSAAN': 'PERLU_PEMERIKSAAN',
+      'Perlu Pemeriksaan': 'PERLU_PEMERIKSAAN',
+      'WASPADA': 'PERLU_PEMERIKSAAN',
+      'Waspada': 'PERLU_PEMERIKSAAN',
+      'DARURAT': 'PERLU_PEMERIKSAAN',
+      'Darurat': 'PERLU_PEMERIKSAAN',
+      'Dugaan Bradikardia': 'PERLU_PEMERIKSAAN',
+      'Dugaan Takikardia': 'PERLU_PEMERIKSAAN',
+      'Penurunan Saturasi Oksigen': 'PERLU_PEMERIKSAAN',
+      'Dugaan Hipoksemia': 'PERLU_PEMERIKSAAN',
+    };
+    if (status && statusLookup[status]) {
+      where.status = statusLookup[status];
     }
     if (bpmStatus && ['BRADICARDIA', 'NORMAL', 'TACHY_RINGAN', 'TACHY_BERAT'].includes(bpmStatus)) {
       where.bpmStatus = bpmStatus;

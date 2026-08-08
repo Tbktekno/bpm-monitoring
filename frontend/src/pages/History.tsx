@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { IoDocumentTextOutline, IoTabletLandscapeOutline } from 'react-icons/io5';
+import { IoDocumentTextOutline } from 'react-icons/io5';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -40,7 +40,7 @@ export default function History() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const { page, goToPage, totalPages, resetPage, paginationParams } = usePagination();
-  const [isExporting, setIsExporting] = useState<'pdf' | 'excel' | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
   const { data, isLoading, error, refetch } = useMonitoringHistory({
     ...paginationParams,
@@ -77,7 +77,7 @@ export default function History() {
   };
 
   const handleExportPdf = async () => {
-    setIsExporting('pdf');
+    setIsExporting(true);
     try {
       const blob = await reportsService.exportPdf({
         type: 'harian',
@@ -89,24 +89,7 @@ export default function History() {
     } catch {
       toast.error('Gagal mengekspor PDF');
     } finally {
-      setIsExporting(null);
-    }
-  };
-
-  const handleExportExcel = async () => {
-    setIsExporting('excel');
-    try {
-      const blob = await reportsService.exportExcel({
-        type: 'harian',
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
-      });
-      reportsService.downloadBlob(blob, `riwayat-monitoring-${new Date().toISOString().split('T')[0]}.xlsx`);
-      toast.success('Excel berhasil diunduh');
-    } catch {
-      toast.error('Gagal mengekspor Excel');
-    } finally {
-      setIsExporting(null);
+      setIsExporting(false);
     }
   };
 
@@ -123,7 +106,7 @@ export default function History() {
           <SearchInput
             value={search}
             onChange={handleSearch}
-            placeholder="Cari nama pasien..."
+            placeholder="Cari nama responden..."
           />
           <Select
             options={STATUS_FILTERS.map(s => ({ value: s.value, label: s.label }))}
@@ -147,17 +130,9 @@ export default function History() {
           variant="secondary"
           icon={<IoDocumentTextOutline />}
           onClick={handleExportPdf}
-          isLoading={isExporting === 'pdf'}
+          isLoading={isExporting}
         >
           Export PDF
-        </Button>
-        <Button
-          variant="secondary"
-          icon={<IoTabletLandscapeOutline />}
-          onClick={handleExportExcel}
-          isLoading={isExporting === 'excel'}
-        >
-          Export Excel
         </Button>
       </div>
 
