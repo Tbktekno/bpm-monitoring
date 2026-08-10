@@ -9,6 +9,8 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { useSocket } from '@/hooks/useSocket';
 import { patientsService } from '@/services/patients.service';
 import { monitoringService, type SessionData } from '@/services/monitoring.service';
+import { devicesService } from '@/services/devices.service';
+import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -79,7 +81,15 @@ export default function Monitoring() {
     refetchInterval: 30000,
   });
 
-  // Auto-load session jika ada yang aktif untuk device ESP32-ALPHA-001
+  // Daftar device terdaftar — dipakai untuk memulai sesi dengan Device ID yang
+  // valid (bukan hardcode lama yang bisa berubah setelah device diedit).
+  const { data: devicesData } = useQuery({
+    queryKey: ['devices', 'list'],
+    queryFn: () => devicesService.list({ limit: 100 }),
+  });
+  const activeDevices = (devicesData?.items || []).filter((d) => d.isActive);
+
+  // Auto-load session jika ada yang aktif untuk device ESP8266-ALPHA-001
   useEffect(() => {
     if (sessionsData?.items?.length) {
       const active = sessionsData.items[0];
@@ -107,11 +117,15 @@ export default function Monitoring() {
   // Reset chart data saat memulai sesi baru
   const handleStartSession = async () => {
     if (!selectedPatientId) return;
+    if (activeDevices.length === 0) {
+      toast.error('Tidak ada device aktif terdaftar. Daftarkan device di halaman Devices terlebih dahulu.');
+      return;
+    }
     setSessionLoading(true);
     try {
       const session = await monitoringService.startSession(
         Number(selectedPatientId),
-        'ESP32-ALPHA-001'
+        activeDevices[0].deviceId
       );
       setActiveSession(session);
       setChartData([]);               // Reset chart — mulai dari 0!
@@ -135,7 +149,6 @@ export default function Monitoring() {
       setActiveSession(null);
       setElapsed('00:00');
       queryClient.invalidateQueries({ queryKey: ['monitoring', 'sessions'] });
-      queryClient.invalidateQueries({ queryKey: ['monitoring', 'history'] });
     } catch {
       // Gagal stop — biarkan user coba lagi
     } finally {
@@ -155,17 +168,34 @@ export default function Monitoring() {
     refetchInterval: activeSession ? 5000 : 30000,
   });
 
-  // Load initial chart data
+  // Load / merge chart data from polling — applies during an active session too,
+  // so the chart keeps updating even if the socket drops (deduped by timestamp).
   useEffect(() => {
-    if (monitorData?.readings?.length && !activeSession) {
-      const readings = [...monitorData.readings].reverse().slice(-50);
-      const initial = readings.map((r: MonitoringReading) => ({
+    if (monitorData?.readings?.length) {
+      const polled = monitorData.readings.map((r: MonitoringReading) => ({
         time: formatTime(r.createdAt),
         bpm: r.bpm,
         spo2: r.spo2,
       }));
-      setChartData(initial);
-      setLatestReading(monitorData.readings[0]);
+
+      setChartData((prev) => {
+        const byTime = new Map<string, { time: string; bpm: number; spo2: number }>();
+        for (const p of [...prev, ...polled]) {
+          byTime.set(p.time, p);
+        }
+        return Array.from(byTime.values())
+          .sort((a, b) => a.time.localeCompare(b.time))
+          .slice(-120);
+      });
+
+      setLatestReading((prevReading) => {
+        const newest = monitorData.readings[monitorData.readings.length - 1];
+        if (!newest) return prevReading;
+        if (!prevReading) return newest;
+        return new Date(newest.createdAt).getTime() >= new Date(prevReading.createdAt).getTime()
+          ? newest
+          : prevReading;
+      });
     }
   }, [monitorData, activeSession]);
 
@@ -177,6 +207,11 @@ export default function Monitoring() {
       const payload = data as { type?: string; reading?: MonitoringReading };
       const reading = payload?.reading;
       if (!reading) return;
+
+      // Abaikan reading milik responden lain supaya chart tidak tercampur.
+      // Reading yang belum ter-assign (patientId null) tetap masuk — nanti
+      // otomatis ter-link ke responden dari sesi aktif.
+      if (reading.patientId != null && reading.patientId !== Number(selectedPatientId)) return;
 
       setLatestReading(reading);
       setChartData((prev) => {
@@ -289,7 +324,7 @@ export default function Monitoring() {
               🔴 Sesi Monitoring Sedang Berlangsung
             </p>
             <p className="text-xs text-success-600 mt-0.5">
-              Data dari ESP32 akan otomatis tercatat ke responden ini
+              Data dari ESP8266 akan otomatis tercatat ke responden ini
             </p>
           </div>
           <span className="text-xs text-success-600 font-mono bg-white px-2 py-1 rounded">
@@ -477,7 +512,7 @@ export default function Monitoring() {
 
             <div className="bg-amber-50 rounded-xl p-4 text-center">
               <p className="text-sm text-amber-700">
-                📊 Data tersimpan dan bisa dilihat di halaman <strong>Riwayat</strong> dan <strong>Laporan</strong>
+                📊 Data tersimpan dan bisa dilihat di halaman <strong>Laporan</strong>
               </p>
             </div>
 

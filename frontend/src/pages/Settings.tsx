@@ -146,12 +146,12 @@ export default function Settings() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 w-full">
       <div>
         <h1 className="text-xl font-bold text-slate-900">Pengaturan</h1>
         <p className="text-sm text-slate-400 mt-1">Kelola pengaturan aplikasi</p>
       </div>
-
+      
       {/* Profil Admin */}
       <Card>
         <h2 className="text-base font-semibold text-slate-800 mb-1">Profil Admin</h2>
@@ -217,47 +217,7 @@ export default function Settings() {
       </Card>
 
       {/* Threshold BPM & SpO₂ */}
-      <Card>
-        <h2 className="text-base font-semibold text-slate-800 mb-1">Threshold BPM & SpO₂</h2>
-        <p className="text-sm text-slate-400 mb-5">Atur batas ambang BPM dan SpO₂</p>
-        <form onSubmit={thresholdForm.handleSubmit(handleThresholdSubmit)} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Min BPM"
-              type="number"
-              placeholder="60"
-              error={thresholdForm.formState.errors.minBpm?.message}
-              {...thresholdForm.register('minBpm')}
-            />
-            <Input
-              label="Max BPM"
-              type="number"
-              placeholder="100"
-              error={thresholdForm.formState.errors.maxBpm?.message}
-              {...thresholdForm.register('maxBpm')}
-            />
-            <Input
-              label="Min SpO₂"
-              type="number"
-              placeholder="95"
-              error={thresholdForm.formState.errors.minSpo2?.message}
-              {...thresholdForm.register('minSpo2')}
-            />
-            <Input
-              label="Max SpO₂"
-              type="number"
-              placeholder="100"
-              error={thresholdForm.formState.errors.maxSpo2?.message}
-              {...thresholdForm.register('maxSpo2')}
-            />
-          </div>
-          <div className="flex justify-end">
-            <Button type="submit" variant="primary" isLoading={thresholdForm.formState.isSubmitting}>
-              Simpan Threshold
-            </Button>
-          </div>
-        </form>
-      </Card>
+      
 
       {/* Hapus Semua Data Monitoring */}
       <Card>
@@ -265,7 +225,7 @@ export default function Settings() {
         <p className="text-sm text-slate-400 mb-5">Hapus seluruh data readings, sesi monitoring, dan log audit.</p>
         <div className="bg-danger-50 border border-danger-200 rounded-xl p-4 mb-4">
           <p className="text-sm font-medium text-danger-700">⚠️ Tindakan ini tidak bisa dibatalkan!</p>
-          <p className="text-xs text-danger-600 mt-1">Device (ESP32) dan akun Admin TIDAK akan dihapus.</p>
+          <p className="text-xs text-danger-600 mt-1">Device (ESP8266) dan akun Admin TIDAK akan dihapus.</p>
         </div>
 
         {clearResult && (
@@ -298,7 +258,7 @@ export default function Settings() {
         onClose={() => setShowClearConfirm(false)}
         onConfirm={handleClearData}
         title="Hapus Semua Data Monitoring?"
-        message="Semua data readings, sesi monitoring, dan log audit akan dihapus permanen. Data device ESP32 dan akun Admin tetap aman."
+        message="Semua data readings, sesi monitoring, dan log audit akan dihapus permanen. Data device ESP8266 dan akun Admin tetap aman."
         confirmLabel="Ya, Hapus Semua"
         variant="danger"
         isLoading={isClearing}

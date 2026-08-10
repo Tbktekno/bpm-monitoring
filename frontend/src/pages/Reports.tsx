@@ -2,19 +2,18 @@ import { useState, useMemo } from 'react';
 import { IoDownloadOutline, IoPulseOutline, IoHeart, IoWaterOutline, IoTimeOutline } from 'react-icons/io5';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { StatusBadge } from '@/components/ui/StatusBadge';
-import { calculateDiseaseStatus, STATUS_COLORS } from '@/constants';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { reportsService } from '@/services/reports.service';
 import { monitoringService, type SessionData } from '@/services/monitoring.service';
 import { patientsService } from '@/services/patients.service';
+import { devicesService } from '@/services/devices.service';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { useQuery } from '@tanstack/react-query';
-import type { Patient } from '@/types';
+import type { Patient, EspDevice } from '@/types';
 
 function formatDate(timestamp: string) {
   try { return format(parseISO(timestamp), 'dd MMM yyyy', { locale: id }); }
@@ -49,6 +48,25 @@ export default function Reports() {
     queryFn: () => patientsService.getAll({ limit: 100 }),
   });
   const patients: Patient[] = patientsData?.items || [];
+
+  // Fetch registered devices to resolve the CURRENT device id/label
+  // (device id bisa diubah dari halaman Devices, sedangkan sesi menyimpan
+  // snapshot device id saat sesi dimulai).
+  const { data: devicesData } = useQuery({
+    queryKey: ['devices', 'list'],
+    queryFn: () => devicesService.list({ limit: 100 }),
+  });
+  const deviceMap = useMemo(() => {
+    const map = new Map<string, EspDevice>();
+    for (const d of devicesData?.items || []) map.set(d.deviceId, d);
+    return map;
+  }, [devicesData]);
+
+  const formatDeviceLabel = (deviceId: string): string => {
+    const dev = deviceMap.get(deviceId);
+    if (!dev) return deviceId;
+    return dev.label ? `${dev.label} (${dev.deviceId})` : dev.deviceId;
+  };
 
   // Fetch completed sessions
   const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
@@ -208,11 +226,10 @@ export default function Reports() {
                     <h3 className="text-base font-bold text-slate-900 truncate">
                       {s.patient?.name || `Responden #${s.patientId}`}
                     </h3>
-                    <StatusBadge status={s.status === 'COMPLETED' ? 'NORMAL' : 'WASPADA'} size="sm" />
                   </div>
                   <p className="text-xs text-slate-400">
                     ID: {s.patient?.patientId || '-'}
-                    {s.deviceId ? ` · ${s.deviceId}` : ''}
+                    {s.deviceId ? ` · ${formatDeviceLabel(s.deviceId)}` : ''}
                   </p>
                   <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500">
                     <span className="flex items-center gap-1"><IoTimeOutline /> {formatDate(s.startTime)} {formatTime(s.startTime)}</span>
@@ -305,22 +322,6 @@ export default function Reports() {
                     <p className="text-lg font-bold text-blue-600">{stats.avgSpo2}%</p>
                     <p className="text-xs text-slate-400">rata-rata ({stats.minSpo2}%–{stats.maxSpo2}%)</p>
                   </div>
-                </div>
-              );
-            })()}
-
-            {/* Suspected disease status */}
-            {(() => {
-              const stats = computeStats(sessionDetail.readings);
-              const diagnosis = calculateDiseaseStatus(stats.avgBpm, stats.avgSpo2);
-              const colors = STATUS_COLORS[diagnosis as keyof typeof STATUS_COLORS] || STATUS_COLORS.Normal;
-              return (
-                <div className={`rounded-xl p-4 ${colors.bg}`}>
-                  <p className="text-xs font-medium text-slate-500 mb-1">🩺 Status Penyakit</p>
-                  <p className={`text-lg font-bold ${colors.text}`}>{diagnosis}</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Berdasarkan rata-rata BPM {stats.avgBpm} & SpO₂ {stats.avgSpo2}%
-                  </p>
                 </div>
               );
             })()}

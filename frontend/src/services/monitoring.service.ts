@@ -39,11 +39,6 @@ export const monitoringService = {
     return response.data.data;
   },
 
-  async getHistory(params?: MonitoringParams): Promise<MonitoringListResponse> {
-    const response = await api.get<ApiResponse<MonitoringListResponse>>('/monitoring/history', { params });
-    return response.data.data;
-  },
-
   /** Memulai sesi monitoring baru untuk responden + device */
   async startSession(patientId: number, deviceId?: string): Promise<SessionData> {
     const response = await api.post<ApiResponse<SessionData>>('/monitoring/session/start', { patientId, deviceId });

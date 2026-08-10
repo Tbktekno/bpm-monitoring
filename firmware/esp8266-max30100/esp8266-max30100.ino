@@ -47,11 +47,11 @@
 #define DEFAULT_SERVER_PORT     5000
 
 // ── Identitas Perangkat (default — ubah via web config) ─────────────────────
-// ⚠ HARUS cocok dengan data di database (prisma/seed.ts)!
-//    deviceId   = "ESP32-ALPHA-001" → ada di tabel Esp32Device
+// ⚠ HARUS cocok dengan data di database (tabel Esp32Device)!
+//    deviceId   = "ESP8266-ALPHA-001" → Device ID terbaru di tabel Esp32Device
 //    apiKey     = "bpm-sample-alpha-key-001" → plaintext, backend akan hash & compare
 //    patientId  = 1 → pastikan patient dengan ID ini ada
-#define DEFAULT_DEVICE_ID       "ESP32-ALPHA-001"
+#define DEFAULT_DEVICE_ID       "ESP8266-ALPHA-001"
 #define DEFAULT_API_KEY         "bpm-sample-alpha-key-001"
 #define DEFAULT_PATIENT_ID      1
 

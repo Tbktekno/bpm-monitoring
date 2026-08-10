@@ -42,20 +42,3 @@ export function useMonitoringByPatient(patientId: string, params?: { page?: numb
     refetchInterval: 10000,
   });
 }
-
-export function useMonitoringHistory(params?: MonitoringParams) {
-  const queryClient = useQueryClient();
-  const { on } = useSocket();
-
-  useEffect(() => {
-    const cleanup = on('monitoring:update', () => {
-      queryClient.invalidateQueries({ queryKey: ['monitoring', 'history'] });
-    });
-    return cleanup;
-  }, [on, queryClient]);
-
-  return useQuery({
-    queryKey: ['monitoring', 'history', params],
-    queryFn: () => monitoringService.getHistory(params),
-  });
-}

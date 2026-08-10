@@ -5,7 +5,6 @@ import {
   IoGridOutline,
   IoPeopleOutline,
   IoPulseOutline,
-  IoTimeOutline,
   IoBarChartOutline,
   IoHardwareChipOutline,
   IoSettingsOutline,
@@ -22,7 +21,6 @@ const navItems = [
   { to: '/', icon: IoGridOutline, label: 'Dashboard' },
   { to: '/patients', icon: IoPeopleOutline, label: 'Responden' },
   { to: '/monitoring', icon: IoPulseOutline, label: 'Monitoring' },
-  { to: '/history', icon: IoTimeOutline, label: 'Riwayat' },
   { to: '/reports', icon: IoBarChartOutline, label: 'Laporan' },
   { to: '/devices', icon: IoHardwareChipOutline, label: 'Device' },
 ];
@@ -31,7 +29,6 @@ const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
   '/patients': 'Responden',
   '/monitoring': 'Monitoring',
-  '/history': 'Riwayat',
   '/reports': 'Laporan',
   '/settings': 'Pengaturan',
   '/devices': 'Device',

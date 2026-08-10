@@ -11,7 +11,6 @@ import PatientList from '@/pages/PatientList';
 import PatientDetail from '@/pages/PatientDetail';
 import Monitoring from '@/pages/Monitoring';
 import MonitoringDetail from '@/pages/MonitoringDetail';
-import History from '@/pages/History';
 import Reports from '@/pages/Reports';
 import Settings from '@/pages/Settings';
 import Devices from '@/pages/Devices';
@@ -88,7 +87,6 @@ export default function App() {
               <Route path="/patients/:id" element={<PatientDetail />} />
               <Route path="/monitoring" element={<Monitoring />} />
               <Route path="/monitoring/:patientId" element={<MonitoringDetail />} />
-              <Route path="/history" element={<History />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/devices" element={<Devices />} />

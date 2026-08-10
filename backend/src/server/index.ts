@@ -63,16 +63,25 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
+// Request logger — didaftarkan SEBELUM rate limiter supaya request yang
+// ditolak oleh limiter (429) tetap tercatat di log. Sebelumnya limiter
+// berjalan lebih dulu sehingga request device yang kena limit tidak terlihat
+// sama sekali di log (membingungkan saat debugging).
+app.use(requestLogger);
+
 // Rate limiting — use centralised config from security.ts
-const limiter = rateLimit(globalRateLimit);
+// Endpoint `/api/v1/readings` dikeluarkan dari global limiter karena device
+// mengirim data setiap beberapa detik; endpoint tersebut punya limiter khusus
+// (`esp32RateLimit`) yang dipasang di readings.routes.ts.
+const limiter = rateLimit({
+  ...globalRateLimit,
+  skip: (req) => req.path.startsWith('/api/v1/readings'),
+});
 app.use('/api/', limiter);
 
 // Stricter rate limit for auth endpoints (brute-force protection)
 const authLimiter = rateLimit(authRateLimit);
 app.use('/api/v1/auth/login', authLimiter);
-
-// Request logger
-app.use(requestLogger);
 
 // ─── Health check ────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {

@@ -291,6 +291,20 @@ export async function updateDevice(req: Request, res: Response, next: NextFuncti
       },
     });
 
+    // Sinkronisasi deviceId lama → baru pada sesi monitoring yang masih
+    // mereferensikan deviceId lama (snapshot saat sesi dimulai). Tanpa ini,
+    // laporan tetap menampilkan device id lama dan data sensor yang masuk
+    // setelah rename tidak lagi terhubung ke sesi aktif.
+    if (data.deviceId && data.deviceId !== existing.deviceId) {
+      const sessionSync = await prisma.monitoringSession.updateMany({
+        where: { deviceId: existing.deviceId },
+        data: { deviceId: data.deviceId },
+      });
+      if (sessionSync.count > 0) {
+        logger.info(`[DEVICES] Synced ${sessionSync.count} sessions: ${existing.deviceId} → ${data.deviceId}`);
+      }
+    }
+
     if (req.admin) {
       await prisma.auditLog.create({
         data: {

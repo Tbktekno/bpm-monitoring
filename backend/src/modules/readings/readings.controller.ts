@@ -140,44 +140,98 @@ interface CreateReadingBody {
 }
 
 /**
+ * Coerce a value to a finite number.
+ *
+ * Accepts JSON numbers and numeric strings (ESP8266HTTPClient kadang
+ * mengirim nilai sebagai string atau float saat parsing body tidak tepat).
+ *
+ * @param value - Untrusted raw value (could be number, string, or null).
+ * @returns A finite number, or `null` when the value cannot be coerced.
+ */
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value.trim());
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
+ * Extract `bpm` and `spo2` from the incoming request body.
+ *
+ * Selain body JSON normal, menangani quirk ESP8266HTTPClient yang kadang
+ * mengirim `Content-Type` salah sehingga Express meng-parse seluruh JSON
+ * sebagai form-urlencoded — hasilnya seluruh body menumpuk di satu key
+ * (mis. `{ '{"bpm":75,"spo2":98}': '' }`). Dalam kasus itu, body asli
+ * diekstrak dan di-parse ulang.
+ *
+ * @param body - The raw request body (untrusted).
+ * @returns Coerced `{ bpm, spo2 }` (each may be `null`).
+ */
+function extractVitals(body: Record<string, unknown>): { bpm: number | null; spo2: number | null } {
+  let bpm = toFiniteNumber(body.bpm);
+  let spo2 = toFiniteNumber(body.spo2);
+
+  if (bpm === null || spo2 === null) {
+    // Coba ekstrak JSON mentah dari body — baik sebagai nilai maupun sebagai
+    // satu-satunya key (kasus form-urlencoded).
+    const candidates: unknown[] = [];
+    for (const key of Object.keys(body)) {
+      candidates.push(body[key]);
+      if (key.trim().startsWith('{') || key.trim().startsWith('[')) {
+        candidates.push(key);
+      }
+    }
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string' || !candidate.trim().startsWith('{')) continue;
+      try {
+        const parsed = JSON.parse(candidate) as Record<string, unknown>;
+        if (bpm === null) bpm = toFiniteNumber(parsed.bpm);
+        if (spo2 === null) spo2 = toFiniteNumber(parsed.spo2);
+        if (bpm !== null && spo2 !== null) break;
+      } catch {
+        // Abaikan kandidat yang bukan JSON valid
+      }
+    }
+  }
+
+  return { bpm, spo2 };
+}
+
+/**
  * Validate and sanitise the incoming reading request body.
  *
  * @param body - The raw request body (untrusted).
  * @returns A validated `CreateReadingBody`.
- * @throws ValidationError if any field is missing, wrong type, or out of range.
+ * @throws ValidationError if any field is missing or out of range.
  */
 function validateReadingBody(body: Record<string, unknown>): CreateReadingBody {
+  const { bpm, spo2 } = extractVitals(body);
   const errors: Record<string, string> = {};
 
-  // ── bpm ─────────────────────────────────────────────────────────────────
-  const bpm = body.bpm;
-  if (bpm == null) {
+  if (bpm === null) {
     errors.bpm = 'BPM wajib diisi';
-  } else if (typeof bpm !== 'number' || !Number.isFinite(bpm)) {
-    errors.bpm = 'BPM harus berupa angka';
-  } else if (!Number.isInteger(bpm)) {
-    errors.bpm = 'BPM harus berupa bilangan bulat';
   } else if (bpm < 30 || bpm > 250) {
     errors.bpm = 'BPM harus antara 30–250';
   }
 
-  // ── spo2 ────────────────────────────────────────────────────────────────
-  const spo2 = body.spo2;
-  if (spo2 == null) {
+  if (spo2 === null) {
     errors.spo2 = 'SpO₂ wajib diisi';
-  } else if (typeof spo2 !== 'number' || !Number.isFinite(spo2)) {
-    errors.spo2 = 'SpO₂ harus berupa angka';
-  } else if (!Number.isInteger(spo2)) {
-    errors.spo2 = 'SpO₂ harus berupa bilangan bulat';
   } else if (spo2 < 50 || spo2 > 100) {
     errors.spo2 = 'SpO₂ harus antara 50–100';
   }
 
   if (Object.keys(errors).length > 0) {
+    logger.warn('[READINGS] Validasi gagal', {
+      body,
+      errors,
+      raw: JSON.stringify(body),
+    });
     throw new ValidationError('Validasi reading gagal', errors);
   }
 
-  return { bpm: bpm as number, spo2: spo2 as number };
+  return { bpm: Math.round(bpm as number), spo2: Math.round(spo2 as number) };
 }
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
@@ -217,8 +271,27 @@ export async function createReading(
   next: NextFunction,
 ): Promise<void> {
   try {
-    // ── 1. Validate body ──────────────────────────────────────────────────
-    const { bpm, spo2 } = validateReadingBody(req.body as Record<string, unknown>);
+    // ── 1. Normalise & validate body ──────────────────────────────────────
+    // Quirk lain ESP8266HTTPClient: kadang JSON terkirim sebagai string JSON
+    // yang ter-escape dua kali, mis. `"{\"bpm\":75,\"spo2\":98}"`. Karena itu
+    // adalah JSON yang valid, `express.json()` mengubahnya menjadi STRING
+    // bukan object — tanpa normalisasi ini reading yang sah akan ditolak 400.
+    let body: Record<string, unknown> = {};
+    const raw = req.body;
+    if (raw && typeof raw === 'object') {
+      body = raw as Record<string, unknown>;
+    } else if (typeof raw === 'string' && raw.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (parsed && typeof parsed === 'object') {
+          body = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // Body rusak — biarkan validasi menolak dengan pesan yang jelas.
+      }
+    }
+
+    const { bpm, spo2 } = validateReadingBody(body);
 
     // ── 2. Resolve device identity ────────────────────────────────────────
     // Device is guaranteed to be authenticated by esp32HttpAuth middleware.

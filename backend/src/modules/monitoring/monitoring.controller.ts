@@ -178,6 +178,23 @@ export async function startMonitoringSession(req: Request, res: Response, next: 
       return;
     }
 
+    // Validasi device terdaftar & aktif — mencegah sesi dibuat dengan
+    // Device ID lama/stale setelah device diedit (rename) di halaman Devices.
+    if (deviceId) {
+      const registered = await prisma.esp32Device.findFirst({
+        where: { deviceId, isActive: true },
+        select: { id: true },
+      });
+      if (!registered) {
+        res.status(400).json({
+          success: false,
+          data: null,
+          message: `Device "${deviceId}" tidak terdaftar atau tidak aktif. Cek Device ID terbaru di halaman Devices.`,
+        });
+        return;
+      }
+    }
+
     // Cek apakah sudah ada session ACTIVE untuk device ini
     if (deviceId) {
       const existing = await prisma.monitoringSession.findFirst({
