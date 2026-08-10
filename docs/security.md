@@ -74,7 +74,7 @@ POST /auth/login { email, password }
 Perangkat mengirim header:
 
 ```
-x-device-id: ESP32-ALPHA-001
+x-device-id: ESP8266-ALPHA-001
 x-api-key: bpm-sample-alpha-key-001
 ```
 
@@ -84,6 +84,8 @@ Proses:
 3. Query `Esp32Device` dengan `deviceId + apiKeyHash + isActive=true`.
 4. Jika cocok → `req.device = { deviceId, label }`, lanjut.
 5. Jika tidak → `401 AUTH_FAILED`.
+
+> ⚠ **Konsistensi Device ID:** `deviceId` yang dikirim device harus sama dengan baris di `Esp32Device`. Jika Device ID diganti (rename), backend otomatis menyinkronkan `MonitoringSession` ke id baru; namun device itu sendiri harus dikonfigurasi ulang agar mengirim id terbaru (jika tidak, autentikasi tetap menolak karena tidak terdaftar).
 
 **Error codes:**
 
@@ -138,15 +140,15 @@ Proses:
 
 | Endpoint | Window | Max (default) |
 |----------|--------|---------------|
-| Global `/api/` | 15 menit | 200 |
+| Global `/api/` | 15 menit | 200 (endpoint `/api/v1/readings` dikecualikan) |
 | Auth `/api/v1/auth/login` | 15 menit | 10 |
-| (Config siap) `/api/v1/readings` | 1 menit | 60 |
+| `/api/v1/readings/device` | 1 menit | 60 |
 
 Dikonfigurasi di `config/security.ts`:
 ```ts
-globalRateLimit   // 200 / 15 menit — dipakai di app.use('/api/')
+globalRateLimit   // 200 / 15 menit — dipakai di app.use('/api/', ...) dengan skip /api/v1/readings
 authRateLimit     // 10 / 15 menit — dipakai di /auth/login
-esp32RateLimit    // 60 / 1 menit — tersedia untuk ingestion
+esp32RateLimit    // 60 / 1 menit — Aktif di readings.routes.ts
 ```
 
 Header respons: `RateLimit-*` (standard headers).

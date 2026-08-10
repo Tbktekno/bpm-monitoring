@@ -149,6 +149,18 @@ Atau gunakan skrip yang tersedia:
 - `run-test.bat` (Windows)
 - `run-test.sh` (Linux/macOS)
 
+### Simulator Device untuk Uji Ingestion
+
+`simulate-device.mjs` (root) meniru pengiriman data sensor dari ESP8266 ke backend — berguna untuk menguji alur ingestion → sesi → laporan tanpa hardware:
+
+```bash
+node simulate-device.mjs
+```
+
+Env opsional: `BACKEND_URL` (default `http://localhost:5000`), `DEVICE_ID` (default `ESP8266-ALPHA-001`, harus terdaftar & aktif), `API_KEY`, `INTERVAL_MS` (default 500), `BPM_MIN`/`BPM_MAX`/`SPO2_MIN`/`SPO2_MAX`.
+
+> Mulai sesi monitoring terlebih dahulu di halaman Monitoring agar data otomatis ter-link ke responden.
+
 ---
 
 ## Pipeline CI/CD

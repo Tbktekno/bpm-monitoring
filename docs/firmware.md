@@ -119,7 +119,7 @@ POST http://{server-ip}:{port}/api/v1/readings/device
 ```
 Content-Type: application/json
 x-api-key: bpm-sample-alpha-key-001
-x-device-id: ESP32-ALPHA-001
+x-device-id: ESP8266-ALPHA-001
 ```
 
 **Body:**
@@ -131,6 +131,8 @@ x-device-id: ESP32-ALPHA-001
 ```json
 { "success": true, "data": { "readingId": 51, "status": "NORMAL" }, "message": "Data tersimpan" }
 ```
+
+> ⚠ `x-device-id` (dan API key) **harus cocok** dengan perangkat yang terdaftar & aktif di tabel `Esp32Device`. Jika Device ID diubah di dashboard, perangkat harus dikonfigurasi ulang (atau reflash) dengan nilai terbaru — sesi lama otomatis disinkronkan oleh backend.
 
 **Implementasi di firmware (`sendReading()`):**
 - Filter: bpm/spo2 > 0 dan bpm 30–250 (nilai tidak realistis dilewati).
@@ -207,7 +209,7 @@ Skenario masuk Config Portal:
 | Server Hostname / IP | `bpm-server` | Hostname atau IP backend |
 | Port | `5000` | Port backend |
 | Patient ID | `1` | ID pasien |
-| Device ID | `ESP32-ALPHA-001` | ID device (harus terdaftar) |
+| Device ID | `ESP8266-ALPHA-001` | ID device (harus terdaftar di `Esp32Device`) |
 | API Key | `bpm-sample-alpha-key-001` | API key (min 16 karakter) |
 
 4. Klik **Simpan & Reboot** → ESP8266 menyimpan ke LittleFS dan reboot.
@@ -299,6 +301,8 @@ Authorization: Bearer <admin-jwt>
 | `ESP32-BETA-002` | `bpm-sample-beta-key-002` |
 | `ESP32-GAMMA-003` | `bpm-sample-gamma-key-003` |
 
+> ⚠ Default Device ID firmware adalah `ESP8266-ALPHA-001` — **tidak** sama dengan seed di atas. Saat memakai seed, daftarkan device dengan ID yang sama persis (mis. ubah lewat Config Portal, atau tambahkan device `ESP8266-ALPHA-001` di dashboard), atau ubah default di `esp8266-max30100.ino` lalu reflash. Backend hanya menerima data dari device terdaftar & aktif.
+
 ---
 
 ## Troubleshooting
@@ -329,6 +333,7 @@ Authorization: Bearer <admin-jwt>
 ### API key ditolak (401)
 - Pastikan device terdaftar & **aktif** di tabel `Esp32Device`.
 - API key harus **tepat sama** (plaintext) dengan yang didaftarkan.
+- Jika baru mengganti **Device ID** di dashboard, perangkat (config di LittleFS / default) juga harus memakai Device ID terbaru — backend mereject ID yang tidak terdaftar.
 
 ---
 

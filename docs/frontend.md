@@ -94,7 +94,6 @@ Definisi route di `src/App.tsx`:
 | `/monitoring/:patientId` | MonitoringDetail | ProtectedRoute + AppLayout |
 | `/patients` | PatientList | ProtectedRoute + AppLayout |
 | `/patients/:id` | PatientDetail | ProtectedRoute + AppLayout |
-| `/history` | History | ProtectedRoute + AppLayout |
 | `/reports` | Reports | ProtectedRoute + AppLayout |
 | `/settings` | Settings | ProtectedRoute + AppLayout |
 | `/devices` | Devices | ProtectedRoute + AppLayout |
@@ -139,7 +138,9 @@ Menyimpan status autentikasi:
 - Menggunakan `useDashboard()`.
 
 ### Monitoring (`pages/Monitoring.tsx`)
-- Pilih pasien → mulai sesi monitoring (device hardcode `ESP32-ALPHA-001`).
+- Pilih pasien → mulai sesi monitoring.
+- Device dipilih otomatis dari **device aktif pertama** di registry (`devicesService.list`) — bukan hardcode device id.
+- Jika tidak ada device aktif terdaftar, mulai sesi diblokir dengan pesan toast.
 - Grafik BPM/SpO₂ real-time (subscribe `monitoring:update`).
 - Timer sesi berjalan, tombol stop.
 - Daftar sesi tersimpan.
@@ -164,19 +165,16 @@ Menyimpan status autentikasi:
 ### PatientEdit (`pages/PatientEdit.tsx`)
 - Form edit pasien.
 
-### History (`pages/History.tsx`)
-- Histori pembacaan dengan filter tanggal, status, pasien.
-- Pagination.
-
 ### Reports (`pages/Reports.tsx`)
 - Daftar sesi monitoring COMPLETED + filter pasien/tanggal.
+- Device ditampilkan sebagai **label + device id terbaru** hasil resolusi dari registry device (`devicesService.list`) — jadi jika device di-rename, laporan otomatis menampilkan id/label yang baru.
 - Modal detail sesi (rata-rata BPM/SpO₂ + **status penyakit dugaan**).
-- Ekspor **PDF sesi** dan PDF/Excel laporan harian/bulanan.
+- Ekspor **PDF sesi** (data harian/bulanan tersedia lewat `reportsService.getDaily`/`getMonthly`/`exportPdf`).
 
 ### Settings (`pages/Settings.tsx`)
-- Ubah ambang batas (threshold) BPM/SpO₂.
-- Ubah profil (nama/email) & password.
-- Hapus data monitoring.
+- Profil admin (nama/email) & ganti password.
+- Hapus seluruh data monitoring (readings, sesi, audit log) dengan konfirmasi.
+- (Form threshold tidak lagi ditampilkan di UI — pengaturan ambang batas via API `PUT /settings/thresholds`.)
 
 ### Devices (`pages/Devices.tsx`)
 - CRUD perangkat ESP32/ESP8266.
@@ -212,8 +210,8 @@ const api = axios.create({
 | `auth.service.ts` | `login`, `logout`, `getMe` |
 | `dashboard.service.ts` | `getDashboard()` |
 | `patients.service.ts` | `getAll`, `getById`, `create`, `update`, `remove` |
-| `monitoring.service.ts` | `getRealtime`, `getByPatient`, `getHistory`, `startSession`, `stopSession`, `getSessionDetail`, `getSessions` |
-| `reports.service.ts` | `getDaily`, `getMonthly`, `exportSessionPdf`, `exportPdf`, `exportExcel`, `downloadBlob` |
+| `monitoring.service.ts` | `getRealtime`, `getByPatient`, `startSession`, `stopSession`, `getSessionDetail`, `getSessions` |
+| `reports.service.ts` | `getDaily`, `getMonthly`, `exportSessionPdf`, `exportPdf`, `downloadBlob` |
 | `settings.service.ts` | `getSettings`, `updateProfile`, `updateThresholds`, `changePassword`, `clearData` |
 | `devices.service.ts` | `list`, `getById`, `create`, `update`, `toggle`, `remove` |
 | `socket.service.ts` | `connect`, `disconnect`, `on`, `off`, `emit`, `isConnected` |
@@ -227,7 +225,7 @@ const api = axios.create({
 | `useAuth()` | Akses konteks autentikasi |
 | `useDashboard()` | Query data dashboard |
 | `usePatients()` | Query/list CRUD pasien (`usePatient`, `usePatientsList`, dll) |
-| `useMonitoring()` | Query data monitoring (`useMonitoringByPatient`, dll) |
+| `useMonitoring()` | Query data monitoring (`useMonitoringByPatient`). Hook riwayat (`useMonitoringHistory`) sudah dihapus seiring penghapusan halaman History |
 | `usePagination()` | Helper state pagination |
 | `useSocket()` | Akses `on`/`off`/`emit` dari `socketService` |
 

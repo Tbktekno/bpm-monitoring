@@ -22,7 +22,8 @@ Dokumen ini memberikan gambaran umum sistem, fitur utama, arsitektur teknologi, 
 | Fitur | Deskripsi |
 |-------|-----------|
 | **Pemantauan real-time** | Data BPM & SpO₂ diterima dari perangkat IoT dan ditampilkan langsung (grafik & angka) via Socket.IO. |
-| **Sesi monitoring** | Sesi mulai/selesai per pasien + perangkat. Semua pembacaan tercatat otomatis ke sesi. |
+| **Sesi monitoring** | Sesi mulai/selesai per pasien + perangkat. Device dipilih otomatis dari device aktif di registry. Semua pembacaan tercatat otomatis ke sesi. |
+| **Sinkronisasi device id** | Jika perangkat di-rename (Device ID baru), seluruh sesi lama ikut disinkronkan otomatis ke id baru — laporan tidak lagi menampilkan id usang. |
 | **Sistem peringatan** | Notifikasi real-time (`monitoring:alert`) ketika BPM/SpO₂ melampaui ambang batas. |
 | **Peringatan threshold** | Cache ambang batas di-load dari tabel `Setting` setiap 5 menit. |
 
@@ -30,9 +31,9 @@ Dokumen ini memberikan gambaran umum sistem, fitur utama, arsitektur teknologi, 
 | Fitur | Deskripsi |
 |-------|-----------|
 | **Manajemen pasien** | CRUD lengkap (tambah, lihat, edit, hapus) dengan validasi, pencarian, pagination. |
-| **Riwayat pemeriksaan** | Histori pembacaan vital sign dengan filter tanggal, status, dan pasien. |
+| **Laporan sesi** | Seluruh sesi monitoring tampil di halaman Laporan dengan statistik rata-rata BPM/SpO₂ dan dugaan penyakit. |
 | **Dashboard interaktif** | Statistik agregat, distribusi status pasien, grafik BPM/SpO₂ per jam, 10 pembacaan terbaru. |
-| **Manajemen perangkat** | CRUD perangkat ESP32/ESP8266, generate API key (ditampilkan sekali), aktif/nonaktif. |
+| **Manajemen perangkat** | CRUD perangkat ESP32/ESP8266, generate API key (ditampilkan sekali), aktif/nonaktif, rename device id. |
 
 ### Laporan & Ekspor
 | Fitur | Deskripsi |
@@ -40,15 +41,14 @@ Dokumen ini memberikan gambaran umum sistem, fitur utama, arsitektur teknologi, 
 | **Laporan harian** | Agregasi pembacaan per hari dalam rentang tanggal. |
 | **Laporan bulanan** | Agregasi pembacaan per bulan dalam satu tahun. |
 | **Ekspor PDF** | Laporan harian/bulanan PDF (PDFKit) dan **PDF laporan sesi** bergaya rumah sakit. |
-| **Ekspor Excel** | Workbook `.xlsx` berisi sheet Summary + Readings (ExcelJS). |
 | **Status penyakit** | Klasifikasi dugaan penyakit (Dugaan Bradikardia/Takikardia/Hipoksemia) berdasarkan rata-rata BPM & SpO₂ sesi. |
 
 ### Pengaturan & Admin
 | Fitur | Deskripsi |
 |-------|-----------|
 | **Autentikasi JWT** | Login aman dengan JWT (HS256), blacklist token, remember me (7 hari). |
-| **Pengaturan threshold** | Ubah batas normal BPM/SpO₂ (`min_bpm`, `max_bpm`, `min_spo2`, `max_spo2`). |
 | **Profil admin** | Ubah nama & email, ganti password. |
+| **Pengaturan threshold** | *Tersedia via API* (`PUT /api/v1/settings/thresholds`); UI threshold di halaman Settings dihapus, ambang default tetap dibaca backend dari tabel `Setting`. |
 | **Hapus data monitoring** | Bersihkan semua readings/sessions/log audit tanpa menghapus device & admin. |
 | **Audit trail** | Semua aktivitas admin (login, CRUD, settings) tercatat di tabel `AuditLog`. |
 
@@ -80,7 +80,7 @@ Dokumen ini memberikan gambaran umum sistem, fitur utama, arsitektur teknologi, 
 | **Real-Time** | Socket.IO 4 |
 | **Autentikasi** | JWT (jsonwebtoken), bcryptjs |
 | **gRPC** | @grpc/grpc-js, protobuf |
-| **Laporan** | PDFKit, ExcelJS |
+| **Laporan** | PDFKit |
 | **Logging** | Winston |
 | **Keamanan** | Helmet, CORS, express-rate-limit |
 | **IoT** | Arduino/ESP8266 (Arduino IDE / PlatformIO), MAX30100 |
@@ -105,7 +105,8 @@ bpm-monitoring/
 ├── docs/                      # Dokumentasi ini
 ├── docker-compose.yml         # Orchestrasi production
 ├── run-dev.bat / run-dev.ps1  # Skrip menjalankan development
-└── test-system.mjs            # Skrip test sistem
+├── test-system.mjs            # Skrip test sistem
+└── simulate-device.mjs        # Simulator data sensor ESP8266 (testing)
 ```
 
 ---
@@ -127,7 +128,7 @@ bpm-monitoring/
    f. Broadcast monitoring:update (+ monitoring:alert jika abnormal)
 6. Dashboard admin menampilkan data real-time (grafik & status)
 7. Setelah selesai, admin stop sesi → tersimpan sebagai COMPLETED
-8. Admin dapat melihat laporan sesi & mengekspor PDF/Excel
+8. Admin dapat melihat laporan sesi & mengekspor PDF.
 ```
 
 ---
@@ -179,9 +180,8 @@ Digunakan pada laporan sesi & PDF, berdasarkan **rata-rata** BPM & SpO₂:
 | `/monitoring/:patientId` | Monitoring Detail | Detail pasien + grafik real-time |
 | `/patients` | Daftar Pasien | List & pencarian pasien |
 | `/patients/:id` | Detail Pasien | Detail + riwayat pasien |
-| `/history` | Riwayat | Histori pembacaan dengan filter |
-| `/reports` | Laporan | Laporan sesi, harian, bulanan + ekspor PDF/Excel |
-| `/settings` | Pengaturan | Threshold, profil, password, hapus data |
+| `/reports` | Laporan | Laporan sesi monitoring + ekspor PDF (harian/bulanan via API) |
+| `/settings` | Pengaturan | Profil, password, hapus data |
 | `/devices` | Perangkat | Manajemen ESP32/ESP8266 |
 
 ---

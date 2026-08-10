@@ -229,7 +229,7 @@ Server berjalan di `http://localhost:5173`:
 
 ### 4. Development Proxy
 
-`frontend/vite.config.ts` menyediakan proxy ke backend sehingga API bisa dipanggil dengan path relatif:
+`frontend/vite.config.ts` menyediakan proxy ke backend sehingga API (REST & Socket.IO) bisa dipanggil dengan path relatif:
 
 ```typescript
 server: {
@@ -239,9 +239,16 @@ server: {
       target: 'http://localhost:5000',
       changeOrigin: true,
     },
+    '/socket.io': {
+      target: 'http://localhost:5000',
+      changeOrigin: true,
+      ws: true,          // WebSocket proxy untuk real-time
+    },
   },
 },
 ```
+
+Dengan proxy di atas, `VITE_API_BASE_URL=/api/v1` dan `VITE_SOCKET_URL=` (same origin) bekerja tanpa konfigurasi tambahan.
 
 ---
 
@@ -264,11 +271,10 @@ Buka browser ke **http://localhost:5173**
 |------|-------|--------|
 | Dashboard | `/` | Statistik & grafik ringkasan |
 | Monitoring | `/monitoring` | Monitoring real-time + mulai/stop sesi |
-| Pasien | `/patients` | CRUD pasien |
-| Riwayat | `/history` | Histori pembacaan + filter |
-| Laporan | `/reports` | Laporan sesi/harian/bulanan + ekspor PDF/Excel |
-| Perangkat | `/devices` | Manajemen ESP32/ESP8266 |
-| Pengaturan | `/settings` | Threshold, profil, password |
+| Responden | `/patients` | CRUD pasien |
+| Laporan | `/reports` | Laporan sesi/harian/bulanan + ekspor PDF |
+| Device | `/devices` | Manajemen ESP32/ESP8266 |
+| Pengaturan | `/settings` | Profil, password, hapus data |
 
 ---
 
@@ -353,7 +359,9 @@ Pastikan `CORS_ORIGIN` di `backend/.env` sesuai URL frontend (`http://localhost:
 4. Cek browser console untuk error WebSocket.
 
 ### Device mengirim data tetapi tidak tercatat ke pasien
-Pastikan sesi monitoring **ACTIVE** untuk device tersebut (mulai dari halaman Monitoring). Reading akan otomatis dikaitkan ke pasien dari sesi.
+- Pastikan device terdaftar & **aktif** di tabel `Esp32Device` (Device ID & API key harus cocok).
+- Pastikan sesi monitoring **ACTIVE** untuk device tersebut (mulai dari halaman Monitoring). Reading akan otomatis dikaitkan ke pasien dari sesi.
+- Jika baru mengganti **Device ID** di halaman Device, sesi lama ikut disinkronkan otomatis; mulai sesi baru memakai device aktif terbaru.
 
 ---
 

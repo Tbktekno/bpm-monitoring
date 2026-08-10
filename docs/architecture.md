@@ -86,9 +86,9 @@ Sistem BPM & SpO₂ Monitoring Dashboard adalah aplikasi **client-server** untuk
 │  │  • Monitoring (+Detail)  │        │  • Auth                       │ │
 │  │  • Pasien (List/Detail/  │        │  • Dashboard                  │ │
 │  │    Create/Edit)          │        │  • Patients                   │ │
-│  │  • Riwayat, Laporan      │        │  • Monitoring (sessions)      │ │
+│  │  • Laporan               │        │  • Monitoring (sessions)      │ │
 │  │  • Perangkat, Pengaturan │        │  • Readings (ingestion)       │ │
-│  │                          │        │  • Reports (PDF/Excel)        │ │
+│  │                          │        │  • Reports (PDF)              │ │
 │  │  Services (Axios +       │        │  • Settings                   │ │
 │  │  socket.io-client)       │        │  • Devices                    │ │
 │  └───────────┬──────────────┘        │                                │ │
@@ -172,7 +172,7 @@ backend/
 │       ├── patients/          # CRUD pasien
 │       ├── monitoring/        # sesi + riwayat
 │       ├── readings/          # ingestion data device
-│       ├── reports/           # laporan + ekspor PDF/Excel
+│       ├── reports/           # laporan + ekspor PDF
 │       ├── settings/          # pengaturan, profil, password
 │       └── devices/           # CRUD perangkat ESP32
 └── ...
@@ -201,15 +201,17 @@ Request Masuk
 └────────┬───────────┘
          ▼
 ┌────────────────────┐
+│ Request Logger     │  → Winston — DIPASANG SEBELUM rate limiter supaya
+│ (request-logger)   │    request yang ditolak 429 tetap tercatat
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
 │ Global Rate Limit  │  → 200 req / 15 menit untuk /api/
+│                    │    (skip: /api/v1/readings → limiter khusus)
 └────────┬───────────┘
          ▼
 ┌────────────────────┐
 │ Auth Rate Limit    │  → 10 req / 15 menit untuk /api/v1/auth/login
-└────────┬───────────┘
-         ▼
-┌────────────────────┐
-│ Request Logger     │  → Winston (method, url, status, durasi)
 └────────┬───────────┘
          ▼
 ┌────────────────────┐
@@ -235,6 +237,8 @@ Request Masuk
 │ Error Handler      │  → globalErrorHandler
 └────────────────────┘
 ```
+
+> **Rate limit ingestion:** endpoint `/api/v1/readings/device` dikecualikan dari global limiter dan memakai `esp32RateLimit` (60 request/menit) yang dipasang langsung di `readings.routes.ts`.
 
 ---
 
@@ -286,6 +290,8 @@ ESP8266 (MAX30100)                     Backend                          Database
 - Threshold cache di-load dari tabel `Setting` dan disegarkan setiap **5 menit**.
 - Jika tidak ada sesi ACTIVE untuk device, reading tetap disimpan dengan `sessionId: null`.
 - `patientId` diambil dari sesi aktif (bukan dari body request).
+- Body dinormalisasi otomatis: JSON ganda (string ter-escape), `Content-Type` salah (form-urlencoded), dan nilai string numerik/float (`"75"`, `75.4`) di-parse & dibulatkan sebelum validasi.
+- Endpoint `/api/v1/readings/device` memakai rate limit khusus (`esp32RateLimit`, 60/menit) dan dikecualikan dari global limiter.
 
 ---
 
@@ -295,10 +301,12 @@ ESP8266 (MAX30100)                     Backend                          Database
 ```
 Admin → POST /api/v1/monitoring/session/start { patientId, deviceId }
   1. Validasi patientId wajib
-  2. Cek apakah device sudah punya sesi ACTIVE (409 jika ya)
-  3. Validasi pasien ada
-  4. Buat MonitoringSession (status: ACTIVE, deviceId: ...)
-  5. Respond 201 dengan data sesi
+  2. Jika deviceId diberikan: validasi device terdaftar & aktif di Esp32Device
+     (tidak terdaftar → 400, mencegah sesi memakai Device ID lama)
+  3. Cek apakah device sudah punya sesi ACTIVE (409 jika ya)
+  4. Validasi pasien ada
+  5. Buat MonitoringSession (status: ACTIVE, deviceId: ...)
+  6. Respond 201 dengan data sesi
 ```
 
 ### Mengakhiri Sesi
@@ -312,6 +320,8 @@ Admin → POST /api/v1/monitoring/session/stop { sessionId | deviceId }
 
 ### Kaitkan Reading ke Sesi
 Saat device mengirim reading, backend mencari `MonitoringSession` dengan `deviceId = device.deviceId && status = ACTIVE`. Jika ditemukan, reading dikaitkan (`sessionId`, `patientId`).
+
+> ⚠ **Rename device:** `updateDevice` (devices.controller.ts) otomatis menyinkronkan `deviceId` lama → baru pada semua sesi via `prisma.monitoringSession.updateMany`. Ini menjaga data tetap tercatat (sesi aktif tetap terhubung, laporan menampilkan id terbaru) ketika Device ID diganti di dashboard.
 
 ---
 

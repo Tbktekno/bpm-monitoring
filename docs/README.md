@@ -42,9 +42,10 @@ Dokumentasi ini mencakup seluruh aspek sistem: arsitektur, instalasi, API, real-
 
 **Alur kerja inti:**
 1. Perangkat IoT (ESP8266/ESP32 + sensor MAX30100) membaca BPM & SpO₂ pasien.
-2. Data dikirim ke backend melalui **HTTP POST** `POST /api/v1/readings/device` (dengan header autentikasi `x-api-key` & `x-device-id`).
+2. Data dikirim ke backend melalui **HTTP POST** `POST /api/v1/readings/device` (dengan header autentikasi `x-api-key` & `x-device-id` — device harus terdaftar & aktif).
 3. Backend memvalidasi, menghitung status (Normal/Waspada/Darurat), menyimpan ke database (SQLite/PostgreSQL via Prisma), lalu **broadcast real-time** ke admin client via Socket.IO.
-4. Admin memantau pasien, melihat grafik real-time, mengelola pasien/device, dan mengekspor laporan PDF/Excel.
+4. Admin memulai sesi monitoring (device dipilih otomatis dari device aktif), memantau grafik real-time, mengelola pasien/device, dan mengekspor laporan PDF.
+5. Jika Device ID diganti di dashboard, seluruh sesi lama ikut disinkronkan otomatis — laporan tidak lagi menampilkan Device ID usang.
 
 ---
 

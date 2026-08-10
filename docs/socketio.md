@@ -139,7 +139,7 @@ Dikirim dari `readings.controller.ts` setelah reading tersimpan:
       "name": "Budi Santoso"
     }
   },
-  "deviceId": "ESP32-ALPHA-001",
+  "deviceId": "ESP8266-ALPHA-001",
   "deviceLabel": "Ruang Observasi 1"
 }
 ```
@@ -150,7 +150,7 @@ Dikirim ketika nilai melampaui ambang batas ATAU status ≠ `NORMAL`:
 
 ```json
 {
-  "deviceId": "ESP32-ALPHA-001",
+  "deviceId": "ESP8266-ALPHA-001",
   "deviceLabel": "Ruang Observasi 1",
   "reading": {
     "id": 52,
@@ -230,12 +230,14 @@ POST /api/v1/readings/device
 
 | Method | Fungsi |
 |--------|--------|
-| `connect(token?)` | Koneksi ke server (reuse koneksi jika sudah aktif) |
+| `connect(token?)` | Koneksi ke server (reuse koneksi jika sudah aktif & token sama) |
 | `disconnect()` | Putuskan koneksi & bersihkan listener |
-| `on(event, cb)` | Daftarkan listener + re-register saat reconnect |
+| `on(event, cb)` | Daftarkan listener + **re-register otomatis saat reconnect** (mencegah event hilang setelah koneksi pulih) |
 | `off(event, cb)` | Hapus listener |
 | `emit(event, ...args)` | Kirim event |
 | `isConnected()` | Cek status koneksi |
+
+> Versi saat ini memperbaiki *reconnect churn*: koneksi yang masih disambungkan/aktif tidak dihancurkan berulang kali pada tiap `connect()`, dan listener diputar ulang (`attachAllListeners`) setelah koneksi pulih sehingga event real-time tidak pernah hilang.
 
 **Hook pengguna** di halaman:
 
@@ -264,6 +266,8 @@ POST /api/v1/readings/device
 ### Device terautentikasi tetapi data tidak tersimpan
 - Pastikan `x-api-key` dan `x-device-id` sesuai dengan device aktif di tabel `Esp32Device`.
 - Pastikan body `{ bpm, spo2 }` memenuhi range validasi.
+- Pastikan ada **sesi ACTIVE** untuk device tersebut — tanpa itu reading tetap disimpan namun **tidak ter-link** ke pasien/sesi.
+- Jika Device ID baru saja diganti di dashboard, sesi lama akan disinkronkan otomatis; data baru hanya ter-link jika `x-device-id` yang dikirim = Device ID terdaftar saat ini.
 
 ---
 

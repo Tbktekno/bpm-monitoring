@@ -416,19 +416,20 @@ POST /monitoring/session/start
 ```
 **Request Body:**
 ```json
-{ "patientId": 1, "deviceId": "ESP32-ALPHA-001" }
+{ "patientId": 1, "deviceId": "ESP8266-ALPHA-001" }
 ```
 
 | Field | Tipe | Wajib | Deskripsi |
 |-------|------|-------|-----------|
 | `patientId` | number | Ya | ID pasien |
-| `deviceId` | string | Tidak | ID device ESP32 |
+| `deviceId` | string | Tidak | ID device terdaftar & aktif di tabel `Esp32Device` |
 
 **Response 201:** sesi dibuat (status `ACTIVE`).
 **Error:**
 - `409` jika device sudah punya sesi ACTIVE
 - `404` jika pasien tidak ditemukan
 - `400` jika `patientId` kosong
+- `400` jika `deviceId` diberikan tetapi **tidak terdaftar / tidak aktif** (mencegah sesi dibuat dengan Device ID lama/usang)
 
 ---
 
@@ -442,7 +443,7 @@ POST /monitoring/session/stop
 ```
 atau
 ```json
-{ "deviceId": "ESP32-ALPHA-001" }
+{ "deviceId": "ESP8266-ALPHA-001" }
 ```
 
 **Response 200:**
@@ -489,7 +490,7 @@ Mengembalikan sesi + seluruh readings (ascending, max 1000).
 {
   "success": true,
   "data": {
-    "session": { "id": 1, "patientId": 1, "deviceId": "ESP32-ALPHA-001", "status": "COMPLETED", "startTime": "...", "endTime": "...", "notes": null },
+    "session": { "id": 1, "patientId": 1, "deviceId": "ESP8266-ALPHA-001", "status": "COMPLETED", "startTime": "...", "endTime": "...", "notes": null },
     "readings": [ { "id": 1, "bpm": 85, "spo2": 98, "status": "NORMAL", "createdAt": "..." } ],
     "totalReadings": 60
   },
@@ -627,15 +628,7 @@ GET /reports/export/pdf?type=daily&startDate=2026-07-01&endDate=2026-07-07
 
 ---
 
-#### 5.4 Export Excel
-```
-GET /reports/export/excel?startDate=2026-07-01&endDate=2026-07-07
-```
-**Response:** `.xlsx` dengan 2 sheet: **Summary** dan **Readings**.
-
----
-
-#### 5.5 Export Session PDF
+#### 5.4 Export Session PDF
 ```
 GET /reports/export/session-pdf?sessionId=1
 ```
@@ -827,6 +820,8 @@ PUT /devices/:id
 ```
 Partial update (`deviceId`, `label`, `isActive`). API key **tidak** dapat diubah.
 
+> ⚠ **Sinkronisasi sesi:** jika `deviceId` diubah, semua `MonitoringSession` yang masih mereferensikan Device ID lama otomatis di-update ke Device ID baru (via `updateMany`). Ini memastikan laporan & sesi aktif tidak kehilangan jejak setelah rename device.
+
 #### 7.5 Toggle Device
 ```
 PATCH /devices/:id/toggle
@@ -861,8 +856,10 @@ POST /readings/device
 
 | Field | Tipe | Wajib | Validasi |
 |-------|------|-------|----------|
-| `bpm` | number | Ya | Integer 30–250 |
-| `spo2` | number | Ya | Integer 50–100 |
+| `bpm` | number | Ya | 30–250 (diterima sebagai angka atau string numerik/float, lalu dibulatkan) |
+| `spo2` | number | Ya | 50–100 (diterima sebagai angka atau string numerik/float, lalu dibulatkan) |
+
+> Body yang salah `Content-Type` (mis. ter-encode sebagai form-urlencoded oleh ESP8266HTTPClient) atau JSON ganda (string) akan **dinormalisasi otomatis** di `readings.controller.ts` sebelum divalidasi.
 
 **Response 201:**
 ```json
@@ -880,6 +877,8 @@ POST /readings/device
 | 401 | `MISSING_API_KEY` | Header `x-api-key` tidak ada |
 | 401 | `INVALID_API_KEY` | API key terlalu pendek |
 | 401 | `AUTH_FAILED` | device tidak cocok (tidak terdaftar / nonaktif / key salah) |
+
+**Rate limit khusus:** endpoint `/api/v1/readings/device` **dikecualikan dari global rate limit** dan dilindungi `esp32RateLimit` (60 request / 1 menit per IP) — lihat [Rate Limiting](#rate-limiting).
 
 **Alur backend:** autentikasi device → validasi body → cari sesi ACTIVE device → hitung status → simpan reading → broadcast `monitoring:update` (+ `monitoring:alert` jika abnormal).
 
@@ -931,11 +930,11 @@ GET /api/health
 
 ## Rate Limiting
 
-| Endpoint | Window | Max | Keterangan |
-|----------|--------|-----|------------|
-| Global `/api/` | 15 menit | 200 (default) | Diterapkan di `server/index.ts` |
+| Endpoint | Window | Max (default) | Keterangan |
+|----------|--------|---------------|------------|
+| Global `/api/` | 15 menit | 200 (default) | Diterapkan di `server/index.ts`; endpoint `/api/v1/readings` **dikecualikan** |
 | Auth `/api/v1/auth/login` | 15 menit | 10 (default) | Proteksi brute-force |
-| (Config) `/api/v1/readings` | 1 menit | 60 | Tersedia di `config/security.ts` (`esp32RateLimit`) |
+| `/api/v1/readings/device` | 1 menit | 60 (default) | `esp32RateLimit` aktif di `readings.routes.ts` (`RATE_LIMIT_ESP32_MAX`) |
 
 Header respons: `RateLimit-*` (standard headers).
 
@@ -948,5 +947,6 @@ Header respons: `RateLimit-*` (standard headers).
 3. **Token blacklist** — token yang di-logout tidak dapat digunakan lagi (in-memory; gunakan Redis untuk multi-instance).
 4. **Autentikasi device** — via header `x-api-key` + `x-device-id` (SHA-256 di DB), bukan JWT.
 5. **Audit trail** — operasi CRUD pada pasien, device, settings tercatat di `AuditLog`.
-6. **Field response history** — endpoint `GET /monitoring/history` mengembalikan `readings` (bukan `items`).
+6. **Field response history** — endpoint `GET /monitoring/history` mengembalikan `readings` (bukan `items`). (Endpoint masih ada untuk kompatibilitas; halaman History di frontend sudah dihapus.)
 7. **Session PDF** — device ditampilkan sebagai label dari tabel `Esp32Device` (fallback ke `deviceId`).
+8. **Rename device** — mengubah `deviceId` via `PUT /devices/:id` otomatis menyinkronkan seluruh `MonitoringSession` ke id baru; sesi baru harus memakai device terdaftar & aktif.
